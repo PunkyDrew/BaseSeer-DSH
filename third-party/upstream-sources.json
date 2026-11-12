@@ -1,0 +1,549 @@
+{
+  "schema": 1,
+  "items": [
+    {
+      "name": "@babel/helpers",
+      "version": "7.26.7",
+      "type": "source",
+      "file": "babel-helpers-7.26.7.tgz",
+      "url": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.26.7.tgz",
+      "integrity": "sha512-8NHiL98vsi0mbPQmYAGWwfcFaOy4j2HY49fXJCfuDcdE7fMIsH9a7GdaeXpIBsbT7307WU8KCMp5pUVDNL4f9A==",
+      "sha256": "2ebb93b8a280182c653356134e6240bdf9763587ae8c8f6d6bd7fca9393dedc5",
+      "bytes": 187243
+    },
+    {
+      "name": "browser-pack",
+      "version": "6.1.0",
+      "type": "source",
+      "file": "browser-pack-6.1.0.tgz",
+      "url": "https://registry.npmjs.org/browser-pack/-/browser-pack-6.1.0.tgz",
+      "integrity": "sha512-erYug8XoqzU3IfcU8fUgyHqyOXqIE4tUTTQ+7mqUjQlvnXkOO6OlT9c/ZoJVHYoAaqGxr09CN53G7XIsO4KtWA==",
+      "sha256": "13db68f814f0b0b943de116b36eee620f23eb857fba80c342791288cf0320dd1",
+      "bytes": 8098
+    },
+    {
+      "name": "elk",
+      "version": "0.12.0",
+      "commit": "323312916048544e4e594eab3303cdb0d01e2929",
+      "file": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "url": "https://github.com/eclipse-elk/elk/archive/323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "sha256": "66e92625b6ab1fb70e4695b007267c6e374714b46a3dcfbfe8483368d3ba73be",
+      "bytes": 9444287
+    },
+    {
+      "name": "elkjs",
+      "version": "0.12.0",
+      "commit": "ff5771d7165445c42c408bb8a090c8035272218c",
+      "file": "elkjs-ff5771d7165445c42c408bb8a090c8035272218c.tar.gz",
+      "url": "https://github.com/kieler/elkjs/archive/ff5771d7165445c42c408bb8a090c8035272218c.tar.gz",
+      "sha256": "ffbcfca757ee26b6b598c50a31d50f086b94887ea5781245ae9e05bf1e00a8a9",
+      "bytes": 1905996
+    },
+    {
+      "name": "com.genmymodel.emf.gwt:emf-common",
+      "version": "2.12.4",
+      "type": "source",
+      "file": "emf-common-2.12.4-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/genmymodel/emf/gwt/emf-common/2.12.4/emf-common-2.12.4-sources.jar",
+      "sha256": "8dfc4e97ca8eee5474927e2b0c5f3bdbd9a52dcd5dff8c0b433b1e938b843bbe",
+      "bytes": 138710
+    },
+    {
+      "name": "com.genmymodel.emf.gwt:emf-common",
+      "version": "2.12.4",
+      "type": "metadata",
+      "file": "emf-common-2.12.4.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/genmymodel/emf/gwt/emf-common/2.12.4/emf-common-2.12.4.pom",
+      "sha256": "bc4d22657ecb9c2d334421067fbd50e749d3c7d67ea1a6974f2e6db1e4939b6f",
+      "bytes": 423
+    },
+    {
+      "name": "com.genmymodel.emf.gwt:emf-ecore",
+      "version": "2.12.4",
+      "type": "source",
+      "file": "emf-ecore-2.12.4-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/genmymodel/emf/gwt/emf-ecore/2.12.4/emf-ecore-2.12.4-sources.jar",
+      "sha256": "dd3b8c1c3bd0a27c1fbba908bcf0ff21a999148da4e68b3546bcde1dbce7b13a",
+      "bytes": 655830
+    },
+    {
+      "name": "com.genmymodel.emf.gwt:emf-ecore",
+      "version": "2.12.4",
+      "type": "metadata",
+      "file": "emf-ecore-2.12.4.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/genmymodel/emf/gwt/emf-ecore/2.12.4/emf-ecore-2.12.4.pom",
+      "sha256": "086b5b55a9eec9f42dbf4691d912410e18d29655b5c6f9bab134778c36be50bc",
+      "bytes": 608
+    },
+    {
+      "name": "com.genmymodel.emf.gwt:emf-parent",
+      "version": "2.12.4",
+      "type": "metadata",
+      "file": "emf-parent-2.12.4.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/genmymodel/emf/gwt/emf-parent/2.12.4/emf-parent-2.12.4.pom",
+      "bytes": 5431,
+      "sha256": "f3688fb1dcc98b2a87893214a0cf0c1607178bbd7200071594ae7bfc26c14b0d"
+    },
+    {
+      "name": "EPL-1.0.html",
+      "version": "",
+      "type": "license",
+      "file": "EPL-1.0.html",
+      "url": "https://www.eclipse.org/legal/epl/epl-v10.html",
+      "bytes": 12637,
+      "sha256": "a40741b59364cc49449255e9b9bfe1fcfe6a2e7ab4d37ca89db3bacbfb14e9d2"
+    },
+    {
+      "name": "com.google.guava:failureaccess",
+      "version": "1.0.1",
+      "type": "source",
+      "file": "failureaccess-1.0.1-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1-sources.jar",
+      "bytes": 3493,
+      "sha256": "092346eebbb1657b51aa7485a246bf602bb464cc0b0e2e1c7e7201fadce1e98f"
+    },
+    {
+      "name": "com.google.guava:guava",
+      "version": "31.1-jre",
+      "type": "source",
+      "file": "guava-31.1-jre-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava/31.1-jre/guava-31.1-jre-sources.jar",
+      "sha256": "8ab1853cdaf936ec88be80c17302b7c20abafbd4f54d4fb54d7011c529e3a44a",
+      "bytes": 1827642
+    },
+    {
+      "name": "com.google.guava:guava",
+      "version": "31.1-jre",
+      "type": "metadata",
+      "file": "guava-31.1-jre.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava/31.1-jre/guava-31.1-jre.pom",
+      "sha256": "9193d07bf4f660108d7358e58b27d21b44e34e80d6734e98e21916376f270de2",
+      "bytes": 10981
+    },
+    {
+      "name": "com.google.guava:guava-gwt",
+      "version": "31.1-jre",
+      "type": "source",
+      "file": "guava-gwt-31.1-jre-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava-gwt/31.1-jre/guava-gwt-31.1-jre-sources.jar",
+      "sha256": "d7e52f41ac6ea010787b5b3c8db7ffb54375d8d0c39c98c2badc9c38de7bf14b",
+      "bytes": 1212945
+    },
+    {
+      "name": "com.google.guava:guava-gwt",
+      "version": "31.1-jre",
+      "type": "metadata",
+      "file": "guava-gwt-31.1-jre.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava-gwt/31.1-jre/guava-gwt-31.1-jre.pom",
+      "sha256": "2ecbef37886c9a9a47a8a1719ee47b7d50cadc7560b114adf6266d4dbcddea42",
+      "bytes": 18182
+    },
+    {
+      "name": "com.google.guava:guava-parent",
+      "version": "31.1-jre",
+      "type": "metadata",
+      "file": "guava-parent-31.1-jre.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/31.1-jre/guava-parent-31.1-jre.pom",
+      "bytes": 14736,
+      "sha256": "4439626783b44ad25ef05ff07621dd4bb796cc4eb4f2966a4a461fea4130e0fc"
+    },
+    {
+      "name": "org.gwtproject:gwt",
+      "version": "2.11.0",
+      "type": "metadata",
+      "file": "gwt-2.11.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/gwtproject/gwt/2.11.0/gwt-2.11.0.pom",
+      "bytes": 10527,
+      "sha256": "f67aa041caecabf02ed7650d4efb10ab3da6a98f05898f35ef8b77efd67e8fa5"
+    },
+    {
+      "name": "gwt",
+      "version": "2.11.0",
+      "type": "source",
+      "file": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "url": "https://codeload.github.com/gwtproject/gwt/tar.gz/7f76f0f2b5b1b028d2d870782048e44402637fb0",
+      "bytes": 12507493,
+      "sha256": "65e3c927b8c0cb9ee3424a1d745b0c6fd67cb509f3e1c02d1b15596334a07ce9"
+    },
+    {
+      "name": "org.gwtproject:gwt-dev",
+      "version": "2.11.0",
+      "type": "source",
+      "file": "gwt-dev-2.11.0-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/gwtproject/gwt-dev/2.11.0/gwt-dev-2.11.0-sources.jar",
+      "sha256": "166b1c51a2f48934aa6ac3940f64d96574661a154588d2e91634cac6090e1223",
+      "bytes": 2222195
+    },
+    {
+      "name": "org.gwtproject:gwt-dev",
+      "version": "2.11.0",
+      "type": "metadata",
+      "file": "gwt-dev-2.11.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/gwtproject/gwt-dev/2.11.0/gwt-dev-2.11.0.pom",
+      "sha256": "be739af4ed748d8a34f5250ce033b36cfad1c4affff7ad52245cf29573bcb736",
+      "bytes": 4239
+    },
+    {
+      "name": "gwt-terms.html",
+      "version": "",
+      "type": "license",
+      "file": "gwt-terms.html",
+      "url": "https://www.gwtproject.org/terms.html",
+      "bytes": 41266,
+      "sha256": "0949679737e825f8e5c4e513cbceef8148f9c9f385d353ea877fcea0773d399c"
+    },
+    {
+      "name": "org.gwtproject:gwt-user",
+      "version": "2.11.0",
+      "type": "source",
+      "file": "gwt-user-2.11.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/gwtproject/gwt-user/2.11.0/gwt-user-2.11.0.jar",
+      "sha256": "ce970506ac4f80682bae5f5ae54fa4b907715adf30a0490615290b016b3ea735",
+      "bytes": 17422415
+    },
+    {
+      "name": "org.gwtproject:gwt-user",
+      "version": "2.11.0",
+      "type": "metadata",
+      "file": "gwt-user-2.11.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/gwtproject/gwt-user/2.11.0/gwt-user-2.11.0.pom",
+      "sha256": "24501808810ddde68d7c8776b52f93e3914ae58b013b7ee9846913c939088f3a",
+      "bytes": 1370
+    },
+    {
+      "name": "org.eclipse.xtend:org.eclipse.xtend.lib",
+      "version": "2.36.0",
+      "type": "source",
+      "file": "org.eclipse.xtend.lib-2.36.0-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtend/org.eclipse.xtend.lib/2.36.0/org.eclipse.xtend.lib-2.36.0-sources.jar",
+      "sha256": "c06d94fbce7b4c831282f5ec818798e970cc893a498ed6524d9e1e47347d362f",
+      "bytes": 125962
+    },
+    {
+      "name": "org.eclipse.xtend:org.eclipse.xtend.lib",
+      "version": "2.36.0",
+      "type": "metadata",
+      "file": "org.eclipse.xtend.lib-2.36.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtend/org.eclipse.xtend.lib/2.36.0/org.eclipse.xtend.lib-2.36.0.pom",
+      "sha256": "adc290c598ce48c636e91a2598911dc61d50c36ec043b92a516a061bd68f9661",
+      "bytes": 1164
+    },
+    {
+      "name": "org.eclipse.xtend:org.eclipse.xtend.lib.gwt",
+      "version": "2.36.0",
+      "type": "source",
+      "file": "org.eclipse.xtend.lib.gwt-2.36.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtend/org.eclipse.xtend.lib.gwt/2.36.0/org.eclipse.xtend.lib.gwt-2.36.0.jar",
+      "bytes": 40421,
+      "sha256": "28249652e1ed76fd6d6bd90670013d4f103239867b516d8b1f6e5fa8b4c53624"
+    },
+    {
+      "name": "org.eclipse.xtend:org.eclipse.xtend.lib.macro",
+      "version": "2.36.0",
+      "type": "source",
+      "file": "org.eclipse.xtend.lib.macro-2.36.0-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtend/org.eclipse.xtend.lib.macro/2.36.0/org.eclipse.xtend.lib.macro-2.36.0-sources.jar",
+      "bytes": 96122,
+      "sha256": "a273e33f833667c13287ca6204446c2b20ac71919f1774177960ea1d071895ba"
+    },
+    {
+      "name": "org.eclipse.xtext:org.eclipse.xtext.xbase.lib",
+      "version": "2.36.0",
+      "type": "source",
+      "file": "org.eclipse.xtext.xbase.lib-2.36.0-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtext/org.eclipse.xtext.xbase.lib/2.36.0/org.eclipse.xtext.xbase.lib-2.36.0-sources.jar",
+      "sha256": "5e06e3cfc74663d11e0debe4cce88e1134d00eba8122b90712fccbb3a5f6754a",
+      "bytes": 109222
+    },
+    {
+      "name": "org.eclipse.xtext:org.eclipse.xtext.xbase.lib",
+      "version": "2.36.0",
+      "type": "metadata",
+      "file": "org.eclipse.xtext.xbase.lib-2.36.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtext/org.eclipse.xtext.xbase.lib/2.36.0/org.eclipse.xtext.xbase.lib-2.36.0.pom",
+      "sha256": "d3fe93f60e3d0ad01eb8f412c1c4dfe9f168de1c2be475eddedd818c8e748f36",
+      "bytes": 726
+    },
+    {
+      "name": "org.eclipse.xtext:org.eclipse.xtext.xbase.lib.gwt",
+      "version": "2.36.0",
+      "type": "source",
+      "file": "org.eclipse.xtext.xbase.lib.gwt-2.36.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtext/org.eclipse.xtext.xbase.lib.gwt/2.36.0/org.eclipse.xtext.xbase.lib.gwt-2.36.0.jar",
+      "bytes": 106861,
+      "sha256": "cc4cdec01056d5142e0b49e743bdd5b298ce3386ba45d58cdca5ada13b3c6039"
+    },
+    {
+      "name": "org.sonatype.oss:oss-parent",
+      "version": "4",
+      "type": "metadata",
+      "file": "oss-parent-4.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/sonatype/oss/oss-parent/4/oss-parent-4.pom",
+      "bytes": 4000,
+      "sha256": "c513995cf019d9213d4fda666589937b2bf1bea5c4cdd337e6170e80b18406ee"
+    },
+    {
+      "name": "umd",
+      "version": "3.0.3",
+      "type": "source",
+      "file": "umd-3.0.3.tgz",
+      "url": "https://registry.npmjs.org/umd/-/umd-3.0.3.tgz",
+      "integrity": "sha512-4IcGSufhFshvLNcMCV80UnQVlZ5pMOC8mvNPForqwA4+lzYQuetTESLDQkeLmihq8bRcnpbQa48Wb8Lh16/xow==",
+      "sha256": "d4af77eb6e785d8a8a5b1ffc67490807d13b432aad1a222466d8270384b8ef91",
+      "bytes": 4181
+    },
+    {
+      "name": "web-worker",
+      "version": "1.4.1",
+      "type": "source",
+      "file": "web-worker-1.4.1.tgz",
+      "url": "https://registry.npmjs.org/web-worker/-/web-worker-1.4.1.tgz",
+      "integrity": "sha512-bEYkHEaeUTjiWscVoW7UBLmAV1S9v0AELr9+3B94Ps1G6E5N/jmSth1e5RZoWbLZWqkI/eyb7KT3sto0ugRpLg==",
+      "sha256": "2428aa784a2353191525dfcd079eeb8aef3a179dc285ff6274908d51d41017c0",
+      "bytes": 9657
+    },
+    {
+      "name": "org.eclipse.xtext:xtext-parent",
+      "version": "2.36.0",
+      "type": "metadata",
+      "file": "xtext-parent-2.36.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/xtext/xtext-parent/2.36.0/xtext-parent-2.36.0.pom",
+      "bytes": 27816,
+      "sha256": "6f5edff785dbed855a3e18a284bec7a0d763bc5389945dea9e5cd447aa709437"
+    }
+  ],
+  "notices": [
+    {
+      "archive": "babel-helpers-7.26.7.tgz",
+      "entry": "package/LICENSE",
+      "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+    },
+    {
+      "archive": "browser-pack-6.1.0.tgz",
+      "entry": "package/LICENSE",
+      "sha256": "435a6722c786b0a56fbe7387028f1d9d3f3a2d0fb615bb8fee118727c3f59b7b"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "LICENSE.md",
+      "sha256": "06509e6da9f35060d3b4f928e522f995df3554d185bcabb7fc5ddab0ad043611"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "NOTICE.md",
+      "sha256": "28b4c11c913f34ab5365a7084a5866522f24cafb047836ef90563bff41b75c66"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.algorithms.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.gmf.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.graph.json.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.graphviz.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.sdk.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elk-323312916048544e4e594eab3303cdb0d01e2929.tar.gz",
+      "entry": "features/org.eclipse.elk.ui.feature/license.html",
+      "sha256": "ca120610664c84aa9a2c0349c026c2fe7db132bc3693876649cbcf5937ccbe83"
+    },
+    {
+      "archive": "elkjs-ff5771d7165445c42c408bb8a090c8035272218c.tar.gz",
+      "entry": "LICENSE.md",
+      "sha256": "5afc48e71b7fea7522cb0187a908d9a4036c6b5f0571a87a7357922fda5dd07b"
+    },
+    {
+      "archive": "gwt-user-2.11.0.jar",
+      "entry": "com/google/gwt/core/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-user-2.11.0.jar",
+      "entry": "com/google/gwt/emul/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-user-2.11.0.jar",
+      "entry": "com/google/gwt/i18n/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-user-2.11.0.jar",
+      "entry": "com/google/gwt/json/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-user-2.11.0.jar",
+      "entry": "com/google/gwt/user/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-user-2.11.0.jar",
+      "entry": "com/google/gwt/xml/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "umd-3.0.3.tgz",
+      "entry": "package/LICENSE",
+      "sha256": "5519d0442a0d5e5e17fd32cd8ffd6d19581964509eb94c5b6ef56c363f5fbd17"
+    },
+    {
+      "archive": "web-worker-1.4.1.tgz",
+      "entry": "package/LICENSE",
+      "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/dev/core/src/com/google/gwt/dev/js/rhino/COPYING",
+      "sha256": "72f220097fd39355a742e8ca667f878056773d14e8537e715c42e02244c94c5c"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/distro-source/core/src/COPYING",
+      "sha256": "12c6d37dfddf0b524ab8e10b1702a77da71d0e708ba35fefd86d16a15a9200ef"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/distro-source/core/src/COPYING.html",
+      "sha256": "63169428c74f0abf08cc3143cf2d21e21c0257df22b788d6bda7086c6cd9f768"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/samples/dynatable/src/com/google/gwt/sample/dynatable/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/samples/dynatablerf/src/main/java/com/google/gwt/sample/dynatablerf/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/samples/hello/src/com/google/gwt/sample/hello/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/samples/json/src/com/google/gwt/sample/json/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/samples/mail/src/com/google/gwt/sample/mail/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/samples/validation/src/main/java/com/google/gwt/sample/validation/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/user/src/com/google/gwt/core/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/user/src/com/google/gwt/i18n/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/user/src/com/google/gwt/json/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/user/src/com/google/gwt/user/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/user/src/com/google/gwt/xml/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0.tar.gz",
+      "entry": "gwt-7f76f0f2b5b1b028d2d870782048e44402637fb0/user/super/com/google/gwt/emul/COPYING",
+      "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+    },
+    {
+      "archive": "EPL-1.0.html",
+      "entry": "EPL-1.0.html",
+      "sha256": "a40741b59364cc49449255e9b9bfe1fcfe6a2e7ab4d37ca89db3bacbfb14e9d2"
+    },
+    {
+      "archive": "gwt-terms.html",
+      "entry": "gwt-terms.html",
+      "sha256": "0949679737e825f8e5c4e513cbceef8148f9c9f385d353ea877fcea0773d399c"
+    }
+  ],
+  "elkjsInstalledFiles": [
+    {
+      "file": "elk-api.d.ts",
+      "sha256": "93f3c5a56c99e0f88f6d6d45e24e4b6861b5500a7a6c03ea01f8af8d46d599af"
+    },
+    {
+      "file": "elk-api.js",
+      "sha256": "ccca46175c05bbd280b5de6c9853103711e52c666a101f145b717e345363e24d"
+    },
+    {
+      "file": "elk-worker.d.ts",
+      "sha256": "cfd7e67195b610f808ebab6ba1065cc2b1709af17309a1975a70f52f814459cc"
+    },
+    {
+      "file": "elk-worker.js",
+      "sha256": "f7617e622f565748e1c88a9f45d97b458bc9c3f4299c0fdc6ed778a92ef30683"
+    },
+    {
+      "file": "elk-worker.min.js",
+      "sha256": "e4f5c51c6f2fd564bb64e52e81c4a85a316ef2f24f8b90e1db5eb886c765b030"
+    },
+    {
+      "file": "elk.bundled.d.ts",
+      "sha256": "6d5ae88a366b976d02fc68bc3cc15af8b23b287735dd506b32d55cb74452f7a3"
+    },
+    {
+      "file": "elk.bundled.js",
+      "sha256": "1222e44f953ce7746af23801e723708f8e6f436b8b377a6a5fc7552f34a307b3"
+    },
+    {
+      "file": "main.d.ts",
+      "sha256": "6d5ae88a366b976d02fc68bc3cc15af8b23b287735dd506b32d55cb74452f7a3"
+    },
+    {
+      "file": "main.js",
+      "sha256": "2e11f2611e1bc60bf3a15c267a0f128ecb5395cb348f733cbc44cefa341f4d44"
+    }
+  ],
+  "provenance": {
+    "elkjsCommit": "ff5771d7165445c42c408bb8a090c8035272218c",
+    "elkJavaTag": "v0.12.0",
+    "elkJavaCommit": "323312916048544e4e594eab3303cdb0d01e2929",
+    "basis": "elkjs release states based on ELK 0.12.0; all nine npm lib files match raw elkjs Git blobs",
+    "compilerRebuilt": false,
+    "sigstoreSignatureVerified": false,
+    "sourceArchiveSerialization": "ELK and elkjs archives made with git archive --format=tar.gz at the specified commits; GitHub downloads have different archive metadata"
+  }
+}

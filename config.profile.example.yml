@@ -1,0 +1,6 @@
+# BaseSeer plugin configuration: merge into the existing DSH profile patch.
+# Preserve other entries and the launcher's DSH_HOME; never put credentials here.
+- id: baseseer
+  config:
+    # Optional private durable storage; preserve the resolved existing data directory.
+    # dataDir: C:/path/to/local/baseseer-data

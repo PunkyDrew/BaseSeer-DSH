@@ -14,7 +14,8 @@ import type { Project } from "./project.ts";
 
 // This machine's record of a project, kept in files under .baseseer/local:
 // the code map, generation runs, source observations, the views' state,
-// usage receipts, build records and the latest validation of the code. Each
+// usage receipts, build records, and the latest validation of the code and
+// review of the plan. Each
 // part reads and writes its own file.
 
 /** The projects this store has open, and the one a plan belongs to. */
@@ -28,7 +29,6 @@ const GENERATIONS_FILE = "generations.json";
 const UI_STATE_FILE = "ui-state.json";
 const USAGE_LOG = "usage.jsonl";
 const BUILDS_FOLDER = "builds";
-const VALIDATION_FILE = "validation.json";
 const OBSERVATIONS_FOLDER = "observations";
 /** Generation runs kept per project; older ones are of no further use. */
 const GENERATIONS_KEPT = 50;
@@ -354,27 +354,37 @@ export class ProjectBuilds {
   }
 }
 
-/** A validation of a project's code: its numbered report, which /baseseer repair fixes. */
-export type ValidationRow = { id: string; plan: string; at: string; report: string };
+/**
+ * The numbered report of a session that read the project for its owner: a
+ * validation of its code, which /baseseer repair fixes, or a review of its
+ * plan at the go.
+ */
+export type ReportRow = { id: string; plan: string; at: string; report: string };
 
-function validationRow(input: unknown): ValidationRow {
-  const value = objectValue(input);
-  if (["id", "plan", "at", "report"].some((k) => typeof value[k] !== "string"))
-    throw Error("Invalid validation record");
-  return value as ValidationRow;
-}
-
-/** The latest validation of each project's code: a new one replaces the last, since only the latest describes the code. */
-export class ProjectValidations {
+/**
+ * The latest report of one kind for each project, in its own file: a new one
+ * replaces the last, since only the latest describes the project as it is.
+ */
+export class ProjectReports {
   private readonly projects: Projects;
-  constructor(projects: Projects) {
+  private readonly file: string;
+  private readonly label: string;
+  constructor(projects: Projects, file: string, label: string) {
     this.projects = projects;
+    this.file = file;
+    this.label = label;
   }
-  latest(plan: string): ValidationRow | undefined {
-    return this.projects.project(plan).local.read(VALIDATION_FILE, "validation", validationRow);
+  private row(input: unknown): ReportRow {
+    const value = objectValue(input);
+    if (["id", "plan", "at", "report"].some((k) => typeof value[k] !== "string"))
+      throw Error(`Invalid ${this.label} record`);
+    return value as ReportRow;
   }
-  save(row: ValidationRow) {
-    validationRow(row);
-    this.projects.project(row.plan).local.write(VALIDATION_FILE, row);
+  latest(plan: string): ReportRow | undefined {
+    return this.projects.project(plan).local.read(this.file, this.label, (input) => this.row(input));
+  }
+  save(row: ReportRow) {
+    this.row(row);
+    this.projects.project(row.plan).local.write(this.file, row);
   }
 }

@@ -92,16 +92,16 @@ export function commandsIn(agent: any, folder: string) {
   };
 }
 
-/** The tools the validation reads with: it changes nothing, runs nothing and starts no other session. */
-const VALIDATION_TOOLS = ["read", "read_image", "grep", "glob", "plan_map", "web_search", "web_fetch"];
+/** The tools a validation or plan review reads with: it changes nothing, runs nothing and starts no other session. */
+const READING_TOOLS = ["read", "read_image", "grep", "glob", "plan_map", "web_search", "web_fetch"];
 
-const VALIDATION_ONLY =
-  "BaseSeer's validation reads and reports: it changes nothing, runs nothing and starts no other session. Read, search and report what you find.";
+const READING_ONLY =
+  "This BaseSeer session reads and reports: it changes nothing, runs nothing and starts no other session. Read, search and report what you find.";
 
-/** Refuses the validation every tool but those that read, so it needs no access beyond the default. */
+/** Refuses a validation or plan review every tool but those that read, so it needs no access beyond the default. */
 export function readOnly(agentCtx: any, agent: any) {
   agentCtx.tools?.guard?.((exec: any) =>
-    exec?.agent === agent && !VALIDATION_TOOLS.includes(exec?.name) ? VALIDATION_ONLY : undefined,
+    exec?.agent === agent && !READING_TOOLS.includes(exec?.name) ? READING_ONLY : undefined,
   );
 }
 

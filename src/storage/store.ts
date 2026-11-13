@@ -9,8 +9,8 @@ import {
   ProjectGenerations,
   ProjectMaps,
   ProjectNavigation,
+  ProjectReports,
   ProjectUsage,
-  ProjectValidations,
   SourceObservations,
 } from "./project-local.ts";
 
@@ -50,7 +50,10 @@ export class Store {
   readonly navigation: ProjectNavigation;
   readonly usage: ProjectUsage;
   readonly builds: ProjectBuilds;
-  readonly validations: ProjectValidations;
+  /** The latest validation of each project's code, which /baseseer repair fixes. */
+  readonly validations: ProjectReports;
+  /** The latest review of each project's plan at the go, which tells the next go the plan was reviewed. */
+  readonly planReviews: ProjectReports;
 
   constructor(dataDir: string, options: { excludedRoots?: string[] } = {}) {
     this.data = new DataFolder(dataDir);
@@ -77,7 +80,8 @@ export class Store {
     this.navigation = new ProjectNavigation(projects);
     this.usage = new ProjectUsage(projects);
     this.builds = new ProjectBuilds(projects);
-    this.validations = new ProjectValidations(projects);
+    this.validations = new ProjectReports(projects, "validation.json", "validation");
+    this.planReviews = new ProjectReports(projects, "plan-review.json", "plan review");
   }
 
   get pricing() {

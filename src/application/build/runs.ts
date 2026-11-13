@@ -20,7 +20,11 @@ import {
   leadInstructions,
   leadTask,
   placesToLook,
+  plannerPlanReview,
+  plannerPlanReviewFailed,
   plannerValidation,
+  planReviewInstructions,
+  planReviewTask,
   reviewInstructions,
   reviewTask,
   useInstructions,
@@ -42,8 +46,8 @@ import {
   type BuildHost,
   type BuildRun,
   type LeadBrief,
+  type ReadingRun,
   type Reviewer,
-  type ValidationRun,
 } from "./model.ts";
 import { freePortBlock } from "./ports.ts";
 import { withCode, withCommands } from "./readme.ts";
@@ -124,6 +128,55 @@ const VALIDATING = `A validation of this project's code is running in the chat "
 
 const RUNNING = `A build of this project is running in the chat "${BUILD_CHAT_TITLES.lead}": the planner tells you here what was built and how to start using it when its check passes. Stop it in the Build view to start again.`;
 
+const PLAN_REVIEWING = `A review of this project's plan is running in the chat "${BUILD_CHAT_TITLES.planReviewer}": the build starts once it finds no gap, and otherwise the planner asks you about the gaps here.`;
+
+const PLAN_REVIEW_STARTED = `Plan review started: before the build, a session that changes nothing reads the plan against your words for what is missing, such as how a mistake is undone or what happens when something fails. You can watch it in the chat "${BUILD_CHAT_TITLES.planReviewer}". If it finds no gap, the build starts on its own; otherwise the planner asks you about each gap here, and your next /baseseer build builds without another review.`;
+
+/**
+ * A check that fails the same way this many times in a row survived the
+ * lead's fixes: the design is more likely wrong than the code, and another
+ * patch costs time, so the lead asks the planner instead.
+ */
+const SAME_FAILURES = 3;
+
+const SAME_FAILURE = `The acceptance check failed the same way ${SAME_FAILURES} times in a row, so patching it again is unlikely to help. Stop fixing: end your turn asking the planner whether the plan is wrong, naming the failure, what you tried and what in the plan you think stops it. Check again once the planner has answered.`;
+
+/**
+ * What a check found, the same for the same failure: each failing check with
+ * the end of its output, since a summary names only the command and its exit
+ * code, without the numbers that change from run to run (times, ports, line
+ * numbers). Output that differs otherwise counts as another failure, so the
+ * lead is never stopped while its fixes change what fails.
+ */
+const failureSignature = (run: { failures: AcceptanceFailure[] }) =>
+  run.failures
+    .map((f) => `${f.check}: ${f.summary}\n${(f.detail ?? "").replace(/\d+/g, "#")}`)
+    .sort()
+    .join("\n");
+
+/** How many of the build's latest checks in a row failed the same way as the last. */
+function sameFailures(checks: { failures: AcceptanceFailure[] }[]) {
+  const last = checks.at(-1);
+  if (!last?.failures.length) return 0;
+  const signature = failureSignature(last);
+  let count = 0;
+  for (let n = checks.length - 1; n >= 0 && failureSignature(checks[n]) === signature; n--) count++;
+  return count;
+}
+
+/**
+ * What the lead does about a failed check, given the build's checks so far,
+ * that one included. The lead asks the planner at every third failure alike,
+ * not at each one after: the planner's answer stands until three more fixes
+ * fail.
+ */
+function failedText(failures: AcceptanceFailure[], checks: { failures: AcceptanceFailure[] }[]) {
+  if (failures.some((f) => f.outside))
+    return "The check could not run on this machine. End your turn with what it needs, for the planner to tell the owner; check again once it is fixed.";
+  if (sameFailures(checks) % SAME_FAILURES === 0) return SAME_FAILURE;
+  return "Send each failure, with its evidence, to the subagent that built that part or to a new one, or fix it yourself, then check again. Never have a check or test weakened, skipped or deleted to make it pass; a test changes only when it checks the wrong thing.";
+}
+
 const REVIEWED =
   "The acceptance check passed, and BaseSeer's review reported: its reviewer reads the owner's words against the build's changes, and its use test uses the program as its owner will, in a copy of the project; the items below are from the session that reported first, and the other's join at your next check, numbered on. The review stands for the owner, so fix every item of its report, wherever the program does the same thing, yourself or with a subagent, including the items you would have left alone; where you think an item was wrong, fix it all the same and say which and why in your report to the planner, which the owner reads. An item asking for what the program already does needs no change: confirm it in the program. Then check again, naming the items you fixed: fixed:[<its number>, ...]. The next passing check completes the build once every item is fixed.";
 
@@ -203,8 +256,95 @@ export class BuildRuns {
 
   /** The projects whose code a validation is reading, which no build changes meanwhile. */
   private readonly validating = new Set<string>();
+  /** The plans a review is reading at the owner's go, which no build or validation starts meanwhile. */
+  private readonly reviewingPlan = new Set<string>();
   /** The plans whose build is between the owner's go and its first save. */
   private readonly starting = new Set<string>();
+
+  /**
+   * The owner's /baseseer build, typed in the Planning chat `chat`. A plan
+   * not yet reviewed for this build is first read against the owner's words
+   * for gaps by a session that changes nothing; the build starts once it
+   * finds none, and otherwise holds for the planner to ask the owner. A plan
+   * reviewed since the last build builds at once, so the go that follows the
+   * owner's answers builds without another review. Returns what the owner is
+   * told now.
+   */
+  async go(actor: Actor, root: string, chat: string): Promise<string> {
+    this.planner(actor);
+    const plan = actor.plan;
+    if (this.reviewingPlan.has(plan)) return PLAN_REVIEWING;
+    if (this.store.running(plan) || !this.host?.reviewPlan || !this.host.tell || this.planReview(plan))
+      return (await this.start(actor, root, chat)).instruction;
+    if (this.validating.has(plan)) throw new PlanError("BUSY", VALIDATING);
+    if (this.starting.has(plan)) throw new PlanError("BUSY", STARTING);
+    // A plan that cannot be built now is not worth a review.
+    this.buildable(plan);
+    const r: ReadingRun = {
+      id: randomUUID(),
+      plan,
+      workspace: actor.workspace,
+      root: fs.realpathSync(root),
+      chat,
+      session: `session-${randomUUID()}`,
+    };
+    this.reviewingPlan.add(plan);
+    void this.reviewPlan(actor, root, r);
+    return PLAN_REVIEW_STARTED;
+  }
+
+  /** The plan's review since the project's latest build started, which the next build follows. */
+  private planReview(plan: string) {
+    const review = this.records.store.planReviews.latest(plan);
+    if (!review) return undefined;
+    const latest = this.store.latest(plan);
+    return !latest || review.at > latest.createdAt ? review : undefined;
+  }
+
+  /**
+   * The plan's review at the go: its report is kept, so the next go knows
+   * the plan was reviewed. Gaps go to the planner to ask the owner; none
+   * starts the build.
+   */
+  private async reviewPlan(actor: Actor, root: string, r: ReadingRun) {
+    let report: string;
+    try {
+      report = await this.readPlan(r);
+      this.records.store.planReviews.save({ id: r.id, plan: r.plan, at: now(), report });
+    } catch (error) {
+      await this.host!.tell!(r.chat, plannerPlanReviewFailed((error as Error).message)).catch(() => undefined);
+      return;
+    } finally {
+      this.reviewingPlan.delete(r.plan);
+    }
+    const message = found(report) ? plannerPlanReview(report) : await this.startReviewed(actor, root, r.chat);
+    await this.host!.tell!(r.chat, message).catch(() => undefined);
+  }
+
+  /** The reviewer's report on the plan as it is now. */
+  private async readPlan(r: ReadingRun) {
+    const brief = {
+      instructions: planReviewInstructions({
+        doc: this.records.doc(r.plan),
+        owner: this.records.store.ownerMessages.read(r.plan),
+        project: this.records.store.read(r.plan).title,
+      }),
+      task: planReviewTask,
+    };
+    const report = (await this.host!.reviewPlan!(r, brief)).trim();
+    if (!report) throw new Error("its session ended without a report");
+    return report;
+  }
+
+  /** The build of a plan its review found no gap in, and what the planner tells the owner of it. */
+  private async startReviewed(actor: Actor, root: string, chat: string) {
+    try {
+      const { instruction } = await this.start(actor, root, chat);
+      return `BaseSeer: the review of the plan at the owner's go found no gap, so the build has started. Tell the owner, in plain words:\n\n${instruction}`;
+    } catch (error) {
+      return `BaseSeer: the review of the plan at the owner's go found no gap, but the build could not start: ${(error as Error).message} Tell the owner; once it is fixed, /baseseer build builds without another review.`;
+    }
+  }
 
   /**
    * The owner's go, typed in the Planning chat `chat`: /baseseer build, or
@@ -227,6 +367,7 @@ export class BuildRuns {
       return { build: this.public(running), instruction: RUNNING };
     }
     if (this.validating.has(plan)) throw new PlanError("BUSY", VALIDATING);
+    if (this.reviewingPlan.has(plan)) throw new PlanError("BUSY", PLAN_REVIEWING);
     if (this.starting.has(plan)) throw new PlanError("BUSY", STARTING);
     // The project is reserved until the build is saved, so two gos at once start one build.
     this.starting.add(plan);
@@ -241,23 +382,13 @@ export class BuildRuns {
     const host = this.host;
     if (!host) throw new PlanError("UNAVAILABLE", "Builds are unavailable in this host");
     const plan = actor.plan;
-    const doc = this.records.doc(plan);
-    const ready = buildPlan(doc);
-    if (!ready.ready)
-      throw new PlanError("INCOMPLETE", `The build cannot start yet: ${ready.problems.join(" ")}`);
-    const delivered = this.store.delivered(plan);
-    const change = delivered ? changeScope(doc, deliveredBuild(delivered)) : undefined;
-    const fixes = repair && this.repairItems(plan, repair);
-    if (!fixes && change && !change.changes.length)
-      throw new PlanError(
-        "STALE",
-        `Nothing in the plan has changed since the build of ${day(change.since.endedAt)}. Change the plan first, or type /baseseer validate to check the code against it.`,
-      );
+    const { doc, delivered, change, fixes } = this.buildable(plan, repair);
     const lead = leadRoute(doc)!;
     const models = componentModels(doc);
     for (const route of [lead, ...models]) await host.check(actor, route.model, route.thinking);
     const ports = await freePortBlock();
     await this.checkMachine(ports);
+    const review = this.planReview(plan);
     const { revision, accepted } = this.acceptDecisions(actor, doc);
     const real = fs.realpathSync(root);
     const repo = git.ensureRepository(real);
@@ -283,6 +414,7 @@ export class BuildRuns {
       builtFrom: digestOf(doc),
       ...(change ? { change } : {}),
       ...(fixes ? { repair: { validation: fixes.validation, items: fixes.numbers } } : {}),
+      ...(review ? { planReview: review.id } : {}),
       ports,
       chat,
       lead: `session-${randomUUID()}`,
@@ -298,6 +430,23 @@ export class BuildRuns {
     this.store.save(b);
     host.started?.(actor, b, this.leadBrief(b, lead, models, fixes?.items));
     return { build: this.public(b), instruction: startedText(b, lead, models, accepted) };
+  }
+
+  /** What a go would build from the plan as it is now, or why it cannot. */
+  private buildable(plan: string, repair?: number[]) {
+    const doc = this.records.doc(plan);
+    const ready = buildPlan(doc);
+    if (!ready.ready)
+      throw new PlanError("INCOMPLETE", `The build cannot start yet: ${ready.problems.join(" ")}`);
+    const delivered = this.store.delivered(plan);
+    const change = delivered ? changeScope(doc, deliveredBuild(delivered)) : undefined;
+    const fixes = repair && this.repairItems(plan, repair);
+    if (!fixes && change && !change.changes.length)
+      throw new PlanError(
+        "STALE",
+        `Nothing in the plan has changed since the build of ${day(change.since.endedAt)}. Change the plan first, or type /baseseer validate to check the code against it.`,
+      );
+    return { doc, delivered, change, fixes };
   }
 
   /** The latest validation's items a repair fixes: those the owner numbered, or every one. */
@@ -346,7 +495,8 @@ export class BuildRuns {
     if (this.store.running(plan))
       throw new PlanError("BUSY", "A build of this project is running: validate its code once the build is done.");
     if (this.validating.has(plan)) return VALIDATING;
-    const v: ValidationRun = {
+    if (this.reviewingPlan.has(plan)) throw new PlanError("BUSY", PLAN_REVIEWING);
+    const v: ReadingRun = {
       id: randomUUID(),
       plan,
       workspace: actor.workspace,
@@ -359,7 +509,7 @@ export class BuildRuns {
     return `Validation started: a session reads the project's code against the plan, your words and BaseSeer's code standard, and changes nothing. You can watch it in the chat "${BUILD_CHAT_TITLES.validator}". The planner tells you here what it finds, and /baseseer repair then fixes it.`;
   }
 
-  private async validation(v: ValidationRun) {
+  private async validation(v: ReadingRun) {
     const doc = this.records.doc(v.plan);
     let message: string;
     try {
@@ -488,14 +638,11 @@ export class BuildRuns {
           instruction: "The acceptance check passed and the build is complete: end your turn now with your report for the planner.",
         };
       }
-      const outside = checked.run.failures.some((f) => f.outside);
       return {
         passed: false,
         failures: checked.run.failures,
         ...(places.length ? { placesToLook: places } : {}),
-        instruction: outside
-          ? "The check could not run on this machine. End your turn with what it needs, for the planner to tell the owner; check again once it is fixed."
-          : "Send each failure, with its evidence, to the subagent that built that part or to a new one, or fix it yourself, then check again. Never have a check or test weakened, skipped or deleted to make it pass; a test changes only when it checks the wrong thing.",
+        instruction: failedText(checked.run.failures, this.store.get(id).checks),
       };
     });
   }

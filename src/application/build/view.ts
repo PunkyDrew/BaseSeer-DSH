@@ -16,16 +16,17 @@ const emptySum = (): UsageSum => ({
 });
 
 /**
- * Model requests BaseSeer observed for this build's lead and subagents, in
- * all, the lead's and per model: counts, tokens and API-equivalent cost at
- * dated reference rates (unpriced ones counted).
+ * Model requests BaseSeer observed for this build's lead and subagents, and
+ * the review of the plan at its go, in all, the lead's and per model: counts,
+ * tokens and API-equivalent cost at dated reference rates (unpriced ones
+ * counted).
  */
 function buildUsage(b: BuildRun, rows: any[]) {
   const total = emptySum();
   const lead = emptySum();
   const byModel: Record<string, UsageSum> = {};
   for (const row of rows) {
-    if (row.run !== b.id) continue;
+    if (row.run !== b.id && row.run !== b.planReview) continue;
     const cost = apiEquivalentCost(row.tokens, row.rate);
     const sums = [total, (byModel[`${row.provider}/${row.model}`] ??= emptySum()), ...(row.session === b.lead ? [lead] : [])];
     for (const sum of sums) {

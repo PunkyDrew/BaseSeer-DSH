@@ -114,19 +114,24 @@ export type LeadBrief = {
 
 /**
  * The titles of the chats BaseSeer starts among the project's chats, a
- * build's lead and reviewers and a validation: the owner can watch them work
- * there, and talks to BaseSeer only in the Planning chat, whose messages
- * every build reads.
+ * build's lead and reviewers, a validation and a plan review: the owner can
+ * watch them work there, and talks to BaseSeer only in the Planning chat,
+ * whose messages every build reads.
  */
 export const BUILD_CHAT_TITLES = {
   lead: "BaseSeer build (watch only)",
   reviewer: "BaseSeer review (watch only)",
   tester: "BaseSeer use test (watch only)",
   validator: "BaseSeer validation (watch only)",
+  planReviewer: "BaseSeer plan review (watch only)",
 } as const;
 
-/** A validation of the project's code while its session reads it: where, and the Planning chat that gets its report. */
-export type ValidationRun = { id: string; plan: string; workspace: string; root: string; chat: string; session: string };
+/**
+ * A session that changes nothing while it reads the project for the owner, a
+ * validation of its code or a review of its plan at the go: where, and the
+ * Planning chat that gets its report.
+ */
+export type ReadingRun = { id: string; plan: string; workspace: string; root: string; chat: string; session: string };
 
 /** What BaseSeer needs from its host to start and check a build. Implemented by the DSH integration. */
 export interface BuildHost {
@@ -170,7 +175,13 @@ export interface BuildHost {
    * The owner's validation: a session that changes nothing reads the
    * project, given the instructions and the task, and answers with its report.
    */
-  validate?(v: ValidationRun, brief: { instructions: string; task: string }): Promise<string>;
+  validate?(v: ReadingRun, brief: { instructions: string; task: string }): Promise<string>;
+  /**
+   * The review of the plan at the owner's go: a session that changes nothing
+   * reads the plan against the owner's words, given the instructions and the
+   * task, and answers with its report.
+   */
+  reviewPlan?(r: ReadingRun, brief: { instructions: string; task: string }): Promise<string>;
   /** Puts BaseSeer's own message in a chat, for its model to answer. */
   tell?(chat: string, text: string): Promise<void>;
 }
@@ -230,6 +241,8 @@ export type BuildRun = {
   change?: ChangeScope;
   /** For a repair: the validation it repairs, and the numbers of the items it fixes. */
   repair?: { validation: string; items: number[] };
+  /** The review of the plan at the go this build followed, whose model requests count towards it. */
+  planReview?: string;
   initializedRepository?: boolean;
   /** First of this build's ports: the acceptance check's, then one for the lead and each subagent. */
   ports: number;

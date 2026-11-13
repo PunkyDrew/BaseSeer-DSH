@@ -41,7 +41,8 @@ export function registerPlanningCommand(ctx: any, services: RequestServices) {
     try {
       const ws = await sessionWorkspace(agent.id);
       if (action === "validate") return { kind: "success", text: builds.validate(actor, ws.path, agent.id) };
-      const started = await builds.start(actor, ws.path, agent.id, action === "repair" ? items : undefined);
+      if (action === "build") return { kind: "success", text: await builds.go(actor, ws.path, agent.id) };
+      const started = await builds.start(actor, ws.path, agent.id, items);
       return { kind: "success", text: started.instruction };
     } catch (error) {
       if (error instanceof PlanError) return { kind: "error", text: error.message };

@@ -5,8 +5,8 @@ import {
   type BuildRun,
   type BuildRuns,
   type LeadBrief,
+  type ReadingRun,
   type Reviewer,
-  type ValidationRun,
 } from "../../../application/build/index.ts";
 import {
   plannerLeadStopped,
@@ -52,8 +52,8 @@ import {
 // the build, judge it: one reads the owner's words against the code, and one
 // uses the program as its owner would, in a copy of the project. The lead and
 // the reviewers run with full access only while their build does. A
-// validation the owner asks for is a session of its own, outside any build,
-// that only reads.
+// validation the owner asks for, and the review of the plan at the go, is a
+// session of its own, outside any build, that only reads.
 
 /** DSH's permission preset that runs a session's commands without the sandbox and without asking. */
 const FULL_ACCESS = "danger-full-access";
@@ -113,8 +113,8 @@ export function buildSessions(
   const browsers = installedBrowsers();
   /** The lead and subagents of each build, by session. */
   const sessions = new Map<string, BuildSession>();
-  /** The validations' sessions, whose model requests count towards each validation as a build's do towards it. */
-  const validators = new Map<string, BuildSession>();
+  /** The sessions that read for the owner, whose model requests count towards each validation or plan review as a build's do towards it. */
+  const readers = new Map<string, BuildSession>();
   /** The first line of each subagent's task, which the others know it by. */
   const tasks = new Map<string, string>();
   /** How many sessions each build has started, which gives each its own port. */
@@ -131,7 +131,7 @@ export function buildSessions(
   });
   ctx.on?.("agent/disposed", ({ agent }: any) => {
     sessions.delete(agent.id);
-    validators.delete(agent.id);
+    readers.delete(agent.id);
     tasks.delete(agent.id);
   });
 
@@ -367,15 +367,16 @@ export function buildSessions(
   }
 
   /**
-   * The owner's validation: a standard DSH session in the project folder, on
-   * the Planning chat's model, that reads the project against the plan and
+   * A session that reads for the owner, a validation of the code or a review
+   * of the plan at the go: a standard DSH session in the project folder, on
+   * the Planning chat's model, that reads the project and its plan and
    * reports. Every tool but those that read is refused it, so it needs no
    * access beyond DSH's default and never waits for the owner's approval.
    */
-  async function startValidator(v: ValidationRun, instructions: string) {
+  async function startReader(v: ReadingRun, chatTitle: string, instructions: string) {
     const options = chatModel(ctx.agents.get(v.chat));
-    if (!options) throw new PlanError("UNAVAILABLE", "The Planning chat's model is unknown, so the validation cannot start.");
-    validators.set(v.session, { role: "worker", plan: v.plan, usage: { run: v.id } });
+    if (!options) throw new PlanError("UNAVAILABLE", `The Planning chat's model is unknown, so the session "${chatTitle}" cannot start.`);
+    readers.set(v.session, { role: "worker", plan: v.plan, usage: { run: v.id } });
     const handle = await ctx.agents.create({
       sessionId: v.session,
       meta: { cwd: v.root, agentPreset: "standard" },
@@ -389,7 +390,7 @@ export function buildSessions(
         scope.systemPrompt.section({ name: "build-plan:validate", order: 700, text: () => instructions });
       },
     });
-    title(handle.agent.session, BUILD_CHAT_TITLES.validator);
+    title(handle.agent.session, chatTitle);
     await ctx.workspaceRegistry.get(v.workspace)?.attachSession(v.session);
   }
 
@@ -465,26 +466,30 @@ export function buildSessions(
       await tell(b.lead, `The planner, from the Planning chat with the owner:\n\n${text}`);
     },
     async validate(v, brief) {
-      await startValidator(v, brief.instructions);
+      await startReader(v, BUILD_CHAT_TITLES.validator, brief.instructions);
       return answer(v.session, brief.task);
+    },
+    async reviewPlan(r, brief) {
+      await startReader(r, BUILD_CHAT_TITLES.planReviewer, brief.instructions);
+      return answer(r.session, brief.task);
     },
     tell,
   };
 
   return {
     host,
-    /** Model usage attribution: the requests of a build's lead and subagents, and of a validation, count towards it. */
-    attribution: { get: (session: string) => sessions.get(session) ?? validators.get(session) },
+    /** Model usage attribution: the requests of a build's lead and subagents, and of a validation or plan review, count towards it. */
+    attribution: { get: (session: string) => sessions.get(session) ?? readers.get(session) },
 
     /**
      * Whether a session is a build's (its lead, or one its lead or a subagent
-     * of it started) or a validation's. None becomes a planner or an ordinary
+     * of it started) or one that reads for the owner. None becomes a planner or an ordinary
      * chat of the project.
      */
     owns(agent: NativeAgent) {
       return (
         sessions.has(agent.id) ||
-        validators.has(agent.id) ||
+        readers.has(agent.id) ||
         sessions.has(agent.session.header.parentSession ?? "")
       );
     },
@@ -492,11 +497,11 @@ export function buildSessions(
     /**
      * Makes a session that the build's lead, or a subagent of it, started a
      * builder of the plan, as DSH creates it. One started after its build
-     * ended joins it all the same, and gets no tools. A validation's session
+     * ended joins it all the same, and gets no tools. A session that reads for the owner
      * is BaseSeer's already.
      */
     claim(agent: NativeAgent) {
-      if (sessions.has(agent.id) || validators.has(agent.id)) return true;
+      if (sessions.has(agent.id) || readers.has(agent.id)) return true;
       const parent = sessions.get(agent.session.header.parentSession ?? "");
       if (!parent) return false;
       sessions.set(agent.id, { ...parent });

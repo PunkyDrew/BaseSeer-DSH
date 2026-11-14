@@ -2,7 +2,8 @@ import type { Document, PlanningRecord } from "../../domain/records.ts";
 import { nodeHeight } from "../graph-model.ts";
 import type { GraphSizes } from "../use-graph-measurements.ts";
 import { clip } from "./geometry.ts";
-import { containmentIndex, partNode } from "./structural.ts";
+import { containmentIndex } from "./levels.ts";
+import { partNode } from "./structural.ts";
 import type {
   StructuralEdge,
   StructuralNode,

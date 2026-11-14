@@ -13,6 +13,7 @@ export const elementExplanations: Record<string, string> = {
   finding: "A problem or concern that needs attention.",
   analysis: "An examination of the code to learn how it is put together.",
   "source file": "A file containing code that has been inspected.",
+  folder: "A folder of source files. Open it to see its own map.",
 };
 export const relationshipExplanations: Record<string, string> = {
   uses: "This part needs the part the arrow points to.",

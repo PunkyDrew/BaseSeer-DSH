@@ -3,6 +3,7 @@ import type { Document, PlanningRecord } from "../../domain/records.ts";
 import type { GraphItem } from "../graph-model.ts";
 import { partColor } from "../graph-presentation.ts";
 import { DiagramFrame } from "./DiagramFrame.tsx";
+import { arrowMove, focusBox } from "./diagram-navigation.ts";
 import { activityLayout, type ActivityNode } from "./activity.ts";
 import { pointsBounds } from "./geometry.ts";
 import { scenarioItem, scenarioModel } from "./scenario.ts";
@@ -113,13 +114,22 @@ export function ActivityDiagram({
     "aria-label": label,
     "aria-pressed": key === selected,
     onClick: () => choose(key),
-    onKeyDown: (event: React.KeyboardEvent) => {
+    "data-box": key,
+    onKeyDown: (event: React.KeyboardEvent<SVGElement>) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        choose(key);
+        if (key !== selected || event.key === " ") choose(key);
+        return;
       }
+      const next = arrowMove(event.key, boxes, key);
+      if (!next) return;
+      event.preventDefault();
+      focusBox(event.currentTarget, next);
+      choose(next);
     },
   });
+  // The steps the arrow keys move between and the minimap draws.
+  const boxes = layout.nodes.flatMap((n) => (n.step ? [{ ...n, id: n.step }] : []));
   const chosenNode = layout.nodes.find((n) => n.step === selected);
   const chosenEdge = layout.edges.find((e) => e.id === selected);
   const near = new Set<string>();
@@ -167,6 +177,9 @@ export function ActivityDiagram({
         pinned={{ top: layout.laneTop, content: headers }}
         inset={inset}
         title={title}
+        outline={boxes}
+        onEscape={() => selected && onSelect(null)}
+        onClear={() => selected && onSelect(null)}
       >
         <defs>
           <marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">

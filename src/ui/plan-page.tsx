@@ -13,11 +13,9 @@ import { ScenarioMatrix } from "./notations/ScenarioMatrix.tsx";
 import { NotationKey } from "./notations/NotationKey.tsx";
 import { scenarioModel, scenariosThrough } from "./notations/scenario.ts";
 import { partColor } from "./graph-presentation.ts";
-import {
-  containmentIndex,
-  projectPartLinks,
-  projectStructural,
-} from "./notations/structural.ts";
+import { projectPartLinks, projectStructural } from "./notations/structural.ts";
+import { containmentIndex, partLevels } from "./notations/levels.ts";
+import type { LevelControls } from "./graph-controls.tsx";
 import { projectRecords } from "./notations/records.ts";
 import { projectDeployment } from "./notations/deployment.ts";
 import type { StructuralProjection } from "./notations/types.ts";
@@ -114,6 +112,10 @@ export function PlanPage({
     sources: navigation.layers?.sources ?? false,
   };
   const selected = navigation.selected ?? "";
+  // The Component and Records pictures open on one level of the plan's parts;
+  // a level whose container has gone opens the nearest one above it.
+  const parts = useMemo(() => partLevels(doc), [signature]);
+  const level = parts.usable(navigation.level ?? "");
   // A diagram element carries more than its record (a step, a merged arrow,
   // a rolled-up box); the diagram reports it when the selection is made there.
   const [graphItem, setGraphItem] = useState<GraphItem | null>(null);
@@ -148,7 +150,9 @@ export function PlanPage({
     } else toFlows(also);
   };
   useEffect(() => {
-    if (focus) select(null, focus.id);
+    if (!focus) return;
+    if (section === "Structure" && parts.byId.has(focus.id)) showPart(focus.id);
+    else select(null, focus.id);
   }, [focus?.serial]);
   useEffect(() => {
     if (selected && !byId(selected) && !graphItem) select(null);
@@ -164,18 +168,40 @@ export function PlanPage({
     )
       onNavigation({ layers: { ...layers, traceability: true } });
   }, [selected]);
+  const openLevel = (id: string) => {
+    setGraphItem(null);
+    onNavigation({ level: id, selected: "" });
+  };
+  // A part found or chosen from the list is shown on the level it is drawn on.
+  const showPart = (id: string) => {
+    setGraphItem(null);
+    onNavigation({ level: parts.levelOf(id), selected: id });
+  };
+  const levelControls: LevelControls = {
+    path: parts.path(level),
+    onLevel: openLevel,
+    find: (query) =>
+      parts.search(query).map((match) => ({
+        id: match.id,
+        title: match.title,
+        where: [plan.title, ...match.path.map((step) => step.title)].join(" › "),
+      })),
+    onFind: showPart,
+  };
   const chooseView = (view: View) => {
     setGraphItem(null);
     showView(view.section, view.notation);
   };
-  // A box that stands for parts opens their flows; anything else opens its details.
+  // On a part's links, choosing another part opens its flows; anywhere else a
+  // choice opens its details, where its flows and a container's diagram are a
+  // button away.
   const onDiagramSelect = (item: GraphItem | null) => {
     if (!item) return select(null);
     const isPart =
       !item.link &&
       item.id === item.record &&
       partKinds.includes(byId(item.record)?.kind ?? "");
-    if (isPart && !(section === "Behavior" && item.record === part)) openFlows(item.record ?? "");
+    if (isPart && section === "Behavior" && item.record !== part) openFlows(item.record ?? "");
     else select(item, item.link ? "" : (item.record ?? ""));
   };
   const popId = useId().replaceAll(":", "");
@@ -277,8 +303,8 @@ export function PlanPage({
       key={notation}
       kind={kind}
       project={project}
-      signature={`${signature}${JSON.stringify(records.map(status))}${JSON.stringify(layers)}`}
-      heading={plan.title}
+      signature={`${signature}${JSON.stringify(records.map(status))}${JSON.stringify(layers)}:${level}`}
+      heading={kind === "dep" ? plan.title : (levelControls.path.at(-1)?.title ?? plan.title)}
       selected={shown}
       onSelect={onDiagramSelect}
       onFallback={() => chooseView(families[0].views[kind === "cmp" ? 3 : 0])}
@@ -286,6 +312,8 @@ export function PlanPage({
       legend={key()}
       inset={inset}
       title={title}
+      levels={kind === "dep" ? undefined : levelControls}
+      onOpen={openLevel}
     />
   );
   const diagram =
@@ -344,11 +372,15 @@ export function PlanPage({
         </div>
       )
     ) : notation === "uml-class" ? (
-      structural("class", (sizes) => projectRecords(doc, status, sizes), "Records")
+      structural("class", (sizes) => projectRecords(doc, status, sizes, level), "Records")
     ) : notation === "uml-deployment" ? (
       structural("dep", (sizes) => projectDeployment(doc, status, sizes), "Deployment")
     ) : (
-      structural("cmp", (sizes) => projectStructural(doc, status, sizes, layers), "Components")
+      structural(
+        "cmp",
+        (sizes) => projectStructural(doc, status, sizes, layers, level),
+        "Components",
+      )
     );
   return (
     <div className="bpv-plan" data-section={section}>
@@ -443,9 +475,9 @@ export function PlanPage({
             )}
           </div>
         )}
-        {section === "Structure" && (
+        {section === "Structure" && notation !== "uml-deployment" && (
           <p className="bpv-plan-hint bpv-muted">
-            Select a part to see its flows.
+            Open a container to see the parts inside it.
           </p>
         )}
         {section === "Behavior" && notation !== "matrix" && (
@@ -512,6 +544,19 @@ export function PlanPage({
             openSource={openSource}
             discuss={discuss}
             onClose={() => select(null)}
+            actions={
+              current &&
+              partKinds.includes(current.kind) && (
+                <>
+                  {parts.inside(current.id) > 0 && section === "Structure" && (
+                    <button onClick={() => openLevel(current.id)}>Open its diagram</button>
+                  )}
+                  {!(section === "Behavior" && part === current.id) && (
+                    <button onClick={() => openFlows(current.id)}>Show its flows</button>
+                  )}
+                </>
+              )
+            }
           />
         ) : (
           <>
@@ -520,7 +565,9 @@ export function PlanPage({
               status={status}
               onSelect={(record) =>
                 partKinds.includes(record.kind)
-                  ? openFlows(record.id)
+                  ? section === "Structure"
+                    ? showPart(record.id)
+                    : openFlows(record.id)
                   : record.kind === "scenario" && section !== "Behavior"
                     ? open(record.id)
                     : select(null, record.id)

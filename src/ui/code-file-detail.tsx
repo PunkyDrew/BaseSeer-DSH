@@ -1,6 +1,7 @@
-// Selected source file panel, split from code-view.tsx. Moved verbatim.
+// The panels beside the code map: the chosen source file, or the chosen closed folder.
 import React from "react";
-import type { CodeFile } from "../contracts/code.ts";
+import type { CodeFile, CodeSnapshot } from "../contracts/code.ts";
+import { holds, projectLevel } from "./code-projection.ts";
 import type { connectionNeighborhood } from "../contracts/source-connections.ts";
 import type { connectionDetailGroups } from "./connection-groups.ts";
 import { ConnectionDetails } from "./connection-details.tsx";
@@ -13,6 +14,36 @@ export function coverageLabel(file: CodeFile) {
   return file.coverage === "parse-error"
     ? "Parse errors: extracted declarations/imports may be incomplete."
     : "Source reading only; language analysis is unsupported.";
+}
+
+export function FolderDetail({
+  snapshot,
+  path,
+  onOpen,
+  onClose,
+}: {
+  snapshot: CodeSnapshot;
+  path: string;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const { files, total } = projectLevel(snapshot, path);
+  const folders = files.filter((box) => box.group).length;
+  return (
+    <aside className="bpv-detail" aria-label="Selected source folder">
+      <button onClick={onClose}>Close folder details</button>
+      <h2>{path}/</h2>
+      <p>{holds(total)}</p>
+      {folders > 0 && (
+        <p className="bpv-muted">
+          {files.length - folders} directly inside, {folders} folders below.
+        </p>
+      )}
+      <button className="bpv-primary" onClick={onOpen}>
+        Open folder
+      </button>
+    </aside>
+  );
 }
 
 export function SourceFileDetail({

@@ -25,12 +25,30 @@ import { graphStyles } from "./graph-styles.ts";
 import { usePhoneInput } from "./use-phone-input.ts";
 import { useGraphTap } from "./use-graph-tap.ts";
 import type { CodeFile, CodeSnapshot } from "../contracts/code.ts";
-import { projectCodeGraph, type ProjectedFile } from "./code-projection.ts";
+import {
+  codeMapTitle,
+  codeParts,
+  findParts,
+  folderPath,
+  holds,
+  levelPath,
+  parentFolder,
+  partLocation,
+  projectLevel,
+  type ProjectedFile,
+} from "./code-projection.ts";
+import { arrowMove, escapeStep, neighbourhood } from "./notations/diagram-navigation.ts";
 import {
   useGraphMeasurements,
   useMeasuredGraphItem,
   type ReportGraphSize,
 } from "./use-graph-measurements.ts";
+
+const coverageName = {
+  syntax: "Syntax inspected",
+  "parse-error": "Parse errors",
+  unsupported: "Source only",
+};
 
 function FileNode({ data }: NodeProps) {
   const file = data.file as ProjectedFile;
@@ -43,7 +61,8 @@ function FileNode({ data }: NodeProps) {
       ref={ref}
       className={`bpg-node bpc-node${data.compact ? " bpc-summary" : ""}`}
       data-coverage={file.coverage}
-      title={file.path}
+      data-folder={file.group ? "" : undefined}
+      title={file.group?.path ?? file.path}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <strong>
@@ -52,21 +71,16 @@ function FileNode({ data }: NodeProps) {
           : file.path.split("/").at(-1)}
       </strong>
       <span className="bpg-kind">
-        {file.language} ·{" "}
         {file.group
-          ? `${file.group.count} inspected files`
-          : file.coverage === "syntax"
-            ? "Syntax inspected"
-            : file.coverage === "parse-error"
-              ? "Parse errors"
-              : "Source only"}
+          ? `Folder · ${holds(file.group.count)}`
+          : `${file.language} · ${coverageName[file.coverage]}`}
       </span>
       {!data.compact && (
         <p>
           {file.group?.path ?? file.path}
           <br />
           {file.group
-            ? `${file.group.internalImports} imports inside this folder · Open to explore`
+            ? `${file.group.internalImports} imports inside`
             : `${file.declarations.length} declarations · ${file.lines} lines`}
         </p>
       )}
@@ -125,26 +139,27 @@ const codeEdgeTypes = { routed: RoutedEdge, connection: ConnectionEdge };
 export function CodeGraph({
   snapshot,
   selected,
-  folder,
+  level,
   dependencies,
   onSelect,
+  onLevel,
   navigation,
   onNavigation,
-  grouped = false,
-  onFolder,
   relationshipConnections,
+  searchable,
   onConnection,
 }: {
   snapshot: CodeSnapshot;
   selected: string;
-  folder: string;
+  level: string;
   dependencies: boolean;
-  onSelect: (path: string) => void;
+  onSelect: (id: string) => void;
+  onLevel: (level: string, selected?: string) => void;
   navigation?: any;
   onNavigation?: (value: any) => void;
-  grouped?: boolean;
-  onFolder?: (folder: string) => void;
   relationshipConnections?: ConnectionGroup[];
+  /** The whole scan, when the snapshot drawn holds only some of its files. */
+  searchable?: CodeSnapshot;
   onConnection?: (connection: ConnectionGroup) => void;
 }) {
   const phone = usePhoneInput();
@@ -179,41 +194,44 @@ export function CodeGraph({
   };
   const select = (id: string) => {
     if (phone) rememberViewport();
-    const group = files.find((f) => f.path === id)?.group;
-    if (group) onFolder?.(group.path);
-    else onSelect(id);
+    onSelect(id);
   };
-  const fit = () => {
+  const openFolder = (id: string) => {
+    const path = folderPath(id);
+    if (path !== null) onLevel(path);
+  };
+  // Every map opens by the frame's rule: whole when it can be read whole, else at a readable
+  // size (on the focused file of a connections map). The Fit button always shows the whole.
+  const fit = (whole = false) => {
     fitting.current = true;
-    const viewport =
-      relationshipConnections &&
-      container.current &&
-      codeViewport(
-        {
-          nodes: graph.nodes.map((node) => ({
-            id: node.id,
-            ...node.position,
-            width: node.measured?.width ?? 190,
-            height: node.measured?.height ?? 132,
-          })),
-          edges: arrangement.layout.edges,
-        },
-        container.current.clientWidth,
-        container.current.clientHeight,
-      );
-    return viewport
-      ? instance.current?.setViewport(viewport)
-      : instance.current?.fitView({
-          padding: 0.15,
-          minZoom: 0.01,
-          maxZoom: 1,
-        });
+    if (!container.current) return;
+    const viewport = codeViewport(
+      arrangement.layout,
+      container.current.clientWidth,
+      container.current.clientHeight,
+      {
+        always: whole,
+        start: relationshipConnections
+          ? arrangement.layout.nodes.find((node) => node.id === focus)
+          : undefined,
+      },
+    );
+    return viewport && instance.current?.setViewport(viewport);
   };
+  // The connected view shows a file's neighbours from every folder, so it has no levels.
   const projection = useMemo(
-    () => projectCodeGraph(snapshot, folder, grouped),
-    [snapshot, folder, grouped],
+    () =>
+      relationshipConnections
+        ? { files: snapshot.files as ProjectedFile[], total: snapshot.files.length }
+        : projectLevel(snapshot, level),
+    [snapshot, level, relationshipConnections],
   );
   const files = projection.files;
+  // The connections map shows one file's neighbours, but finds any file of the scan.
+  const parts = useMemo(() => {
+    const all = codeParts(searchable ?? snapshot);
+    return relationshipConnections ? all.filter((part) => folderPath(part.id) === null) : all;
+  }, [snapshot, searchable, relationshipConnections]);
   const connections = useMemo(() => {
     const names = new Set(files.map((f) => f.path));
     if (relationshipConnections)
@@ -231,7 +249,7 @@ export function CodeGraph({
           to: i.target!,
         })),
     );
-  }, [snapshot.digest, folder, relationshipConnections]);
+  }, [snapshot.digest, level, relationshipConnections]);
   const layoutInput = useMemo(
     () => ({
       direction: relationshipConnections ? direction : undefined,
@@ -261,7 +279,7 @@ export function CodeGraph({
     }),
     [
       snapshot.digest,
-      folder,
+      level,
       sizes,
       connections,
       relationshipConnections,
@@ -269,6 +287,12 @@ export function CodeGraph({
     ],
   );
   const arrangement = useGraphLayout(layoutInput);
+  // Selecting a box dims all but it and the boxes it is connected to.
+  const focus = files.some((f) => f.path === selected) ? selected : "";
+  const near = useMemo(() => neighbourhood(connections, focus), [connections, focus]);
+  const dim = (id: string) => (focus && !near.has(id) ? "bpg-dim" : "");
+  const edgeClass = (from: string, to: string) =>
+    !focus ? "" : from === focus || to === focus ? "bpg-near" : "bpg-dim";
   const graph = useMemo<{ nodes: Node[]; edges: Edge[] }>(() => {
     const names = new Set(files.map((f) => f.path));
     const arrangedNodes = new Map(
@@ -311,6 +335,7 @@ export function CodeGraph({
               return {
                 id,
                 type: "routed",
+                className: edgeClass(f.path, i.target!),
                 source: f.path,
                 target: i.target!,
                 ariaLabel: `${f.path} imports ${i.target} at line ${i.line} (${i.kind})`,
@@ -344,8 +369,9 @@ export function CodeGraph({
         },
         data: { file: f, reportSize, compact: !!relationshipConnections },
         selected: f.path === selected,
+        className: dim(f.path),
         ariaLabel: f.group
-          ? `Source folder: ${f.group.path}; ${f.group.count} files`
+          ? `Source folder: ${f.group.path}; ${holds(f.group.count)}`
           : `Source file: ${f.path}`,
         draggable: false,
       }));
@@ -355,7 +381,7 @@ export function CodeGraph({
     };
   }, [
     snapshot.digest,
-    folder,
+    level,
     selected,
     sizes,
     reportSize,
@@ -364,14 +390,6 @@ export function CodeGraph({
     relationshipConnections,
     onConnection,
   ]);
-  const primary =
-    files.find((f) => f.path === selected) ??
-    [...files].sort((a, b) => {
-      const score = (f: CodeFile) =>
-        (/([/.]|^)(test|tests|spec)([/.]|$)/i.test(f.path) ? -100 : 0) +
-        f.imports.length;
-      return score(b) - score(a);
-    })[0];
   const tap = useGraphTap(phone, (id) => {
     const file = files.find((file) => file.path === id);
     const edge = graph.edges.find((edge) => edge.id === id);
@@ -381,9 +399,9 @@ export function CodeGraph({
   });
   const focusSelection = () => {
     fitting.current = false;
-    return primary
+    return focus && !relationshipConnections
       ? instance.current?.fitView({
-          nodes: [{ id: primary.path }],
+          nodes: [{ id: focus }],
           padding: 0.25,
           minZoom: 0.9,
           maxZoom: 1,
@@ -395,27 +413,76 @@ export function CodeGraph({
       ? fit()
       : savedViewport.current
         ? void instance.current?.setViewport(savedViewport.current)
-        : relationshipConnections
-          ? fit()
-          : focusSelection();
-  const previousFocus = useRef({ selected, folder });
+        : focusSelection();
+  const previousFocus = useRef({ selected, level });
+  // A new level or choice is framed once its boxes are laid out, and again whenever they are
+  // re-laid out with their measured sizes, until the reader moves the view themselves.
+  const refocus = useRef(false);
   useEffect(() => {
     const moved =
       (!phone && previousFocus.current.selected !== selected) ||
-      previousFocus.current.folder !== folder;
-    previousFocus.current = { selected, folder };
-    if (moved) savedViewport.current = undefined;
+      previousFocus.current.level !== level;
+    previousFocus.current = { selected, level };
+    if (moved) {
+      savedViewport.current = undefined;
+      refocus.current = true;
+    }
+    if (!arrangement.ready) return;
     const frame = requestAnimationFrame(() => {
-      if (moved) void navigate(relationshipConnections ? fit : focusSelection);
+      if (refocus.current) void navigate(focusSelection);
       else restoreOrFit();
     });
     return () => cancelAnimationFrame(frame);
-  }, [snapshot.digest, folder, selected, phone, arrangement.layout]);
+  }, [snapshot.digest, level, selected, phone, arrangement.layout, arrangement.ready]);
+  const levelControls = {
+    path: levelPath(level),
+    onLevel: (next: string) => onLevel(next),
+    noun: "file",
+    find: (query: string) => findParts(parts, query),
+    onFind: (id: string) => {
+      if (relationshipConnections) return select(id);
+      const place = partLocation(id);
+      onLevel(place.level, place.selected);
+    },
+  };
+  const escape = () => {
+    const step = escapeStep(Boolean(focus), level);
+    if (step === "clear") onSelect("");
+    if (step === "up") onLevel(parentFolder(level));
+  };
+  const keyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && !relationshipConnections) {
+      event.preventDefault();
+      escape();
+      return;
+    }
+    const target = (event.target as Element)
+      .closest(".react-flow__node,.react-flow__edge")
+      ?.getAttribute("data-id");
+    const file = files.find((f) => f.path === target);
+    const edge = graph.edges.find((e) => e.id === target);
+    if (!file && !edge) return;
+    const next = file ? arrowMove(event.key, arrangement.layout.nodes, file.path) : null;
+    if (next) {
+      event.preventDefault();
+      select(next);
+      container.current
+        ?.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(next)}"]`)
+        ?.focus();
+      return;
+    }
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if (edge && relationshipConnections)
+      onConnection?.(relationshipConnections.find((c) => c.id === edge.id)!);
+    else if (file?.group && event.key === "Enter") openFolder(file.path);
+    else select(file?.path ?? edge!.source);
+  };
   const legend = (
     <>
       {!relationshipConnections && (
         <GraphLegend
-          kinds={["Source file"]}
+          kinds={files.some((f) => f.group) ? ["Source file", "Folder"] : ["Source file"]}
           types={
             dependencies
               ? files.flatMap((f) =>
@@ -436,13 +503,13 @@ export function CodeGraph({
           ? "Solid arrows group observed imports and static references between files; dashed arrows are separate inferred explanations. Arrows show the stated direction of each relationship, not a verified execution sequence. Select an arrow to see the individual names, source locations and evidence."
           : "Arrows point to imported files. Dashed arrows mark type-only or dynamic imports; imports do not establish execution order."}
         {files.some((f) => f.group) &&
-          " Folder boxes group actual files; select a folder to drill down. Arrows summarize observed imports between the displayed groups; folders are not architectural claims."}
+          " A folder's arrows sum up the imports of the files inside it; folders are not architectural claims."}
       </p>
       <p className="bpv-muted">
         {phone
           ? "Drag to move around and pinch to zoom."
           : "Scroll to zoom and drag the background to move around."}{" "}
-        Select a file to inspect its source.
+        Select a file to inspect its source; open a folder to see what it holds.
       </p>
     </>
   );
@@ -459,8 +526,6 @@ export function CodeGraph({
           ? `connections · ${relationshipConnections.reduce((n, c) => n + c.items.length, 0)} references`
           : "visible import links"}
         {!dependencies && " (hidden)"}
-        {projection.omitted > 0 &&
-          ` · the first 80 boxes are shown; ${projection.omitted} more are reachable through Browse files and the folder filters`}
       </p>
       {arrangement.error ? (
         <p role="alert" className="bpv-error bpg-alert">
@@ -477,22 +542,7 @@ export function CodeGraph({
         className="bpg-canvas"
         data-testid="code-graph"
         {...tap}
-        onKeyDownCapture={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          const target = (event.target as Element)
-            .closest(".react-flow__node,.react-flow__edge")
-            ?.getAttribute("data-id");
-          const file = files.find((f) => f.path === target);
-          const edge = graph.edges.find((e) => e.id === target);
-          if (file || edge) {
-            event.preventDefault();
-            if (edge && relationshipConnections)
-              onConnection?.(
-                relationshipConnections.find((c) => c.id === edge.id)!,
-              );
-            else select(file?.path ?? edge!.source);
-          }
-        }}
+        onKeyDownCapture={keyDown}
       >
         <ReactFlow
           nodes={graph.nodes}
@@ -508,6 +558,7 @@ export function CodeGraph({
           onMove={(event, viewport) => {
             if (event) {
               fitting.current = false;
+              refocus.current = false;
               savedViewport.current = viewport;
             }
           }}
@@ -531,6 +582,8 @@ export function CodeGraph({
           autoPanOnNodeFocus={!phone}
           preventScrolling={!phone}
           onNodeClick={(_, n) => select(n.id)}
+          onNodeDoubleClick={(_, n) => openFolder(n.id)}
+          onPaneClick={() => phone && onSelect("")}
           onEdgeClick={(_, e) =>
             relationshipConnections
               ? onConnection?.(
@@ -539,7 +592,7 @@ export function CodeGraph({
               : select(e.source)
           }
         >
-          {size.height >= 360 && size.width >= 560 && (
+          {!phone && size.height >= 360 && size.width >= 560 && (
             <MiniMap
               position="bottom-left"
               style={{ width: 120, height: 76 }}
@@ -559,9 +612,10 @@ export function CodeGraph({
             fitting.current = false;
             void navigate(() => instance.current?.zoomOut());
           }}
-          onFit={() => void navigate(fit)}
+          onFit={() => void navigate(() => fit(true))}
           legend={legend}
-          title="Code map"
+          title={codeMapTitle}
+          levels={levelControls}
         />
       </div>
     </section>

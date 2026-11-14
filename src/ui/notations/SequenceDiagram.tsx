@@ -3,6 +3,7 @@ import type { Document, PlanningRecord } from "../../domain/records.ts";
 import type { GraphItem } from "../graph-model.ts";
 import { partColor } from "../graph-presentation.ts";
 import { DiagramFrame } from "./DiagramFrame.tsx";
+import { arrowMove, focusBox } from "./diagram-navigation.ts";
 import { frameTag, pointsBounds } from "./geometry.ts";
 import { scenarioItem, scenarioModel } from "./scenario.ts";
 import { sequenceLayout } from "./sequence.ts";
@@ -77,13 +78,26 @@ export function SequenceDiagram({
     "aria-label": label,
     "aria-pressed": key === selected,
     onClick: () => choose(key),
-    onKeyDown: (event: React.KeyboardEvent) => {
+    "data-box": key,
+    onKeyDown: (event: React.KeyboardEvent<SVGElement>) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        choose(key);
+        if (key !== selected || event.key === " ") choose(key);
+        return;
       }
+      const next = arrowMove(event.key, boxes, key);
+      if (!next) return;
+      event.preventDefault();
+      focusBox(event.currentTarget, next);
+      choose(next);
     },
   });
+  // The lifelines' heads and the steps on them: what the arrow keys move
+  // between and the minimap draws.
+  const boxes = [
+    ...layout.lifelines.flatMap((l) => (l.part ? [{ ...l.head, id: `life:${l.part}` }] : [])),
+    ...layout.executions.map((e) => ({ x: e.x, y: e.y, width: e.width, height: e.height, id: e.step })),
+  ];
   const execution = layout.executions.find((e) => e.step === selected);
   const chosenArrow = layout.arrows.find((a) => a.id === selected);
   const near = new Set<string>();
@@ -117,6 +131,9 @@ export function SequenceDiagram({
         opening={layout.frame}
         inset={inset}
         title={title}
+        outline={boxes}
+        onEscape={() => selected && onSelect(null)}
+        onClear={() => selected && onSelect(null)}
       >
         <defs>
           <marker id={open} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">

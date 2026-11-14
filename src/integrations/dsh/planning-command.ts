@@ -13,6 +13,12 @@ const UPDATE_PLAN = `BaseSeer, at the owner's /baseseer plan: bring the plan up 
 - What you can confirm on this machine or on the web, where the design depends on it.
 Change the plan for all of it in as few writes as you can. Then call plan_build {command:{action:"plan"}} and tell the owner, in plain words: what you changed, whether the plan is ready to build and what stops it, what the next build would change, and each question only the owner can answer.`;
 
+/**
+ * The planner's first turn after /baseseer start. DSH shows a chat only once
+ * it has a turn, so without one the command's own reply stays hidden.
+ */
+const OPEN_PLANNING = `BaseSeer, at the owner's /baseseer start: Planning is now active in this chat. In one or two plain sentences, tell the owner you will keep the project's plan as you talk, which BaseSeer's tab shows, and ask what they want to build or change. Write nothing to the plan yet.`;
+
 const USAGE =
   "Use /baseseer plan, /baseseer build, /baseseer validate, /baseseer repair [item numbers], /baseseer status, /baseseer undo, /baseseer start [project name], /baseseer normal, /baseseer accept <reviewed revision>, or /baseseer accept-proposal <id> <reviewed revision>.";
 
@@ -61,7 +67,7 @@ export function registerPlanningCommand(ctx: any, services: RequestServices) {
         [first = "status", ...args] = input.split(/\s+/),
         action = first.toLowerCase();
       if (["plan", "build", "validate", "repair"].includes(action)) return projectAction(agent, action, args);
-      return agent.runMaintenance(async () => {
+      const reply = await agent.runMaintenance(async () => {
         const ws = await sessionWorkspace(agent.id);
         if (action === "normal") {
           await chooseMode(ws, agent, "normal");
@@ -114,6 +120,8 @@ export function registerPlanningCommand(ctx: any, services: RequestServices) {
           text: `${result.summary}\n${action.startsWith("accept") ? "Design acceptance does not grant implementation permission." : "The shared view has updated."}`,
         };
       });
+      if (action === "start" && reply.kind === "success") await promptAsBaseSeer(ctx, agent.id, OPEN_PLANNING);
+      return reply;
     },
   });
 }

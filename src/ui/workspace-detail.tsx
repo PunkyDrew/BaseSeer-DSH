@@ -83,6 +83,7 @@ export function SelectedPlanItem({
   openSource,
   discuss,
   onClose,
+  actions,
 }: {
   current: PlanningRecord | undefined;
   graphItem: GraphItem | null;
@@ -96,11 +97,16 @@ export function SelectedPlanItem({
   openSource: (request: SourceRequest, element: HTMLElement) => void;
   discuss: (id: string, title: string) => Promise<unknown>;
   onClose: () => void;
+  /** What the picture offers for the item: its flows, or a container's own diagram. */
+  actions?: React.ReactNode;
 }) {
   const panel = useRef<HTMLElement>(null);
   useEffect(() => {
     panel.current?.closest(".bpv-side")?.scrollTo({ top: 0 });
     const frame = requestAnimationFrame(() => {
+      // Someone moving through a picture with the keys stays in it; the
+      // details follow beside them.
+      if (document.activeElement?.closest(".bpg-frame")) return;
       panel.current
         ?.querySelector<HTMLElement>("h2")
         ?.focus({ preventScroll: true });
@@ -116,6 +122,7 @@ export function SelectedPlanItem({
           </svg>
           All items
         </button>
+        {actions}
         {current && (
           <button onClick={() => void discuss(current.id, current.title)}>
             Discuss in chat

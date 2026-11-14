@@ -1,5 +1,6 @@
 import type { Document, PlanningRecord } from "../domain/records.ts";
 import type { CodeSnapshot } from "./code.ts";
+import { planCoverage } from "./plan-coverage.ts";
 import {
   sourceConnections,
   type ConnectionCitation,
@@ -11,7 +12,7 @@ export type MappedComponent = {
   id: string;
   title: string;
   responsibility: string;
-  basis: "source-inferred" | "historical" | "unmapped";
+  basis: "scanned" | "historical" | "unmapped";
   paths: string[];
   proposedPaths: string[];
   inputs: string[];
@@ -44,12 +45,18 @@ function validCitation(c: ConnectionCitation, files: CodeSnapshot["files"]) {
 
 // A component is an explicit responsibility, never a guessed folder or the file
 // with the most references. This read-only projection is shared by UI and tools.
-// A match means bound to this saved inspection, not current disk or proven meaning.
+// A component's files are the ones its plan names that the scan found, the same
+// rule Plan vs code uses. Found means present in this saved inspection, not
+// current on disk or proven to do what the plan says.
 export function componentMap(
   document: Document,
   snapshot: CodeSnapshot & { context?: string },
   explanations: ConnectionExplanation[],
 ) {
+  const coverage = new Map(
+    planCoverage(document, snapshot).components.map((c) => [c.id, c]),
+  );
+  const scanned = new Set(snapshot.files.map((f) => f.path));
   const components: MappedComponent[] = document.records
     .filter((r) => r.kind === "component" && r.status !== "superseded")
     .map((r: PlanningRecord) => {
@@ -62,10 +69,9 @@ export function componentMap(
         !!snapshot.context &&
         explanation.context === snapshot.context;
       const citations = explanation?.sources ?? [];
-      const proposedPaths: string[] = [
-        ...new Set<string>(r.data.observed?.paths ?? []),
-      ];
-      const paths = proposedPaths.filter(
+      const proposedPaths = coverage.get(r.id)?.planned ?? [];
+      const paths = proposedPaths.filter((path) => scanned.has(path));
+      const cited = paths.filter(
         (path) =>
           current &&
           citations.some(
@@ -76,10 +82,8 @@ export function componentMap(
       if (!r.data.responsibility?.trim())
         gaps.push("Responsibility is not recorded.");
       if (!proposedPaths.length)
-        gaps.push(
-          "No explicit observed source mapping. Intended contracts and prose citations do not assign source ownership.",
-        );
-      if (proposedPaths.length > paths.length)
+        gaps.push("The plan names no source files for this component.");
+      if (ref && cited.length < paths.length)
         gaps.push(
           "Some mapped paths lack source citations matching this inspection.",
         );
@@ -91,11 +95,7 @@ export function componentMap(
         id: r.id,
         title: r.title,
         responsibility: r.data.responsibility ?? "",
-        basis: paths.length
-          ? "source-inferred"
-          : ref
-            ? "historical"
-            : "unmapped",
+        basis: paths.length ? "scanned" : ref ? "historical" : "unmapped",
         paths,
         proposedPaths,
         inputs: r.data.observed?.inputs ?? [],

@@ -3,6 +3,7 @@ import { nodeHeight, nodeWidth } from "../graph-model.ts";
 import { cardFiles } from "../graph-card.ts";
 import type { GraphSizes } from "../use-graph-measurements.ts";
 import { wrapText } from "./geometry.ts";
+import { containmentIndex, partLevels, type DiagramLevel } from "./levels.ts";
 import type {
   StructuralEdge,
   StructuralNode,
@@ -22,36 +23,6 @@ const commentKinds: Record<keyof Layers, string[]> = {
 };
 /** The links that anchor a comment to what it concerns. */
 const anchorKinds = ["satisfies", "addresses", "maps-to"];
-
-/** Ancestor chains from component.data.parent, with cycle/missing warnings. */
-export function containmentIndex(records: readonly PlanningRecord[]) {
-  const byId = new Map(records.map((r) => [r.id, r]));
-  const warnings: string[] = [];
-  const ancestors = new Map<string, string[]>();
-  for (const r of records.filter((r) => r.kind === "component")) {
-    const seen = new Set([r.id]),
-      chain: string[] = [];
-    let parent: string | undefined = r.data.parent;
-    while (parent) {
-      if (seen.has(parent)) {
-        warnings.push(
-          `Containment loop at ${r.title}; grouping is incomplete.`,
-        );
-        break;
-      }
-      seen.add(parent);
-      const value = byId.get(parent);
-      if (!value || value.kind !== "component") {
-        warnings.push(`${r.title} names a missing container ${parent}.`);
-        break;
-      }
-      chain.push(parent);
-      parent = value.data.parent;
-    }
-    ancestors.set(r.id, chain);
-  }
-  return { byId, ancestors, warnings: [...new Set(warnings)] };
-}
 
 const symbolOf = (r: PlanningRecord): Symbol =>
   r.kind === "interface"
@@ -121,47 +92,90 @@ function comment(r: PlanningRecord, status: string, sizes: GraphSizes): Structur
   };
 }
 
-/** UML components: every part and interface of the plan, nested by containment, with its dependencies and realizations, and the comments a layer adds. */
+/**
+ * The boxes a component diagram draws for its parts. The whole plan draws
+ * every part inside its nearest container. A level draws the parts directly
+ * in it, each container among them closed with a count of what it holds, the
+ * open container as the boundary around them, and the boxes outside it that
+ * its parts depend on or are used by.
+ */
+function partBoxes(doc: Document, level: DiagramLevel | undefined) {
+  const levels = partLevels(doc);
+  const parts = doc.records.filter((r) =>
+    ["component", "interface"].includes(r.kind),
+  );
+  if (level === undefined) {
+    const { ancestors } = containmentIndex(doc.records);
+    const parents = new Map(
+      parts.map((r) => [r.id, ancestors.get(r.id)?.[0] ?? null]),
+    );
+    const hasChildren = new Set([...parents.values()].filter(Boolean));
+    return {
+      levels,
+      inner: parts,
+      boundary: null,
+      box: (id: string): string | null => (parents.has(id) ? id : null),
+      parent: (id: string) => parents.get(id) ?? null,
+      open: (id: string) => hasChildren.has(id),
+      folded: (_id: string) => 0,
+    };
+  }
+  return {
+    levels,
+    inner: levels.children(level),
+    boundary: level ? (levels.byId.get(level) ?? null) : null,
+    box: (id: string) => levels.boxOn(id, level),
+    parent: (id: string) =>
+      level && levels.within(id, level) ? level : null,
+    open: (_id: string) => false,
+    folded: (id: string) => levels.inside(id),
+  };
+}
+
+/**
+ * UML components, with dependencies and realizations and the comments a layer
+ * adds: every part of the plan nested by containment, or, given a level, the
+ * diagram of that level alone.
+ */
 export function projectStructural(
   doc: Document,
   status: (r: PlanningRecord) => string,
   sizes: GraphSizes = {},
   layers: Layers = { traceability: false, sources: false },
+  level?: DiagramLevel,
 ): StructuralProjection {
-  const { byId, ancestors, warnings } = containmentIndex(doc.records);
-  const parts = doc.records.filter((r) =>
-    ["component", "interface"].includes(r.kind),
-  );
-  const partIds = new Set(parts.map((r) => r.id));
-  // A part is drawn inside its nearest recorded container.
-  const parents = new Map(
-    parts.map((r) => [
-      r.id,
-      (ancestors.get(r.id) ?? []).find((a) => partIds.has(a)) ?? null,
-    ]),
-  );
-  const hasChildren = new Set([...parents.values()].filter(Boolean));
+  const boxes = partBoxes(doc, level);
+  const { byId, warnings } = containmentIndex(doc.records);
   const drawn = (Object.keys(commentKinds) as (keyof Layers)[])
     .filter((layer) => layers[layer])
     .flatMap((layer) => commentKinds[layer]);
-  const comments = doc.records.filter((r) => drawn.includes(r.kind));
-  const nodes = [
-    ...parts.map((r) =>
-      partNode(
-        r,
-        status(r),
-        sizes,
-        parents.get(r.id) ? byId.get(parents.get(r.id)!)! : null,
-        hasChildren.has(r.id),
-      ),
-    ),
-    ...comments.map((r) => comment(r, status(r), sizes)),
-  ];
+  const parentRecord = (id: string) => byId.get(boxes.parent(id) ?? "") ?? null;
+  const nodes: StructuralNode[] = boxes.inner.map((r) => ({
+    ...partNode(r, status(r), sizes, parentRecord(r.id), boxes.open(r.id)),
+    ...(boxes.folded(r.id) ? { folded: boxes.folded(r.id) } : {}),
+  }));
+  if (boxes.boundary)
+    nodes.unshift(partNode(boxes.boundary, status(boxes.boundary), sizes, null, true));
   const shown = new Set(nodes.map((n) => n.id));
+  // A box outside the open level joins the diagram when something inside
+  // depends on it or uses it.
+  const context = (id: string) => {
+    if (shown.has(id)) return;
+    const r = byId.get(id)!;
+    nodes.push({
+      ...partNode(r, status(r), sizes, null, false),
+      ...(boxes.folded(id) ? { folded: boxes.folded(id) } : {}),
+    });
+    shown.add(id);
+  };
+  const isPart = (id: string) =>
+    ["component", "interface"].includes(byId.get(id)?.kind ?? "");
+  const inside = (id: string) =>
+    level === undefined || boxes.levels.within(id, level);
   // Descendant check so a part→container relation is shown by nesting, not
   // by an arrow into its own boundary.
   const contains = (outer: string, inner: string) => {
-    for (let p = parents.get(inner); p; p = parents.get(p) ?? null)
+    for (let p = boxes.parent(inner); p; p = boxes.parent(p))
       if (p === outer) return true;
     return false;
   };
@@ -173,30 +187,56 @@ export function projectStructural(
     string,
     { from: string; to: string; type: string; links: Link[] }
   >();
-  const anchors: Link[] = [];
   for (const link of doc.links) {
-    if (anchorKinds.includes(link.kind)) {
-      if (shown.has(link.from) && shown.has(link.to)) anchors.push(link);
-      continue;
-    }
     if (!["uses", "implements"].includes(link.kind)) continue;
-    if (!partIds.has(link.from) || !partIds.has(link.to)) {
+    if (!isPart(link.from) || !isPart(link.to)) {
       outside++;
       continue;
     }
-    if (
-      link.from === link.to ||
-      contains(link.from, link.to) ||
-      contains(link.to, link.from)
-    ) {
+    if (!inside(link.from) && !inside(link.to)) continue;
+    const from = boxes.box(link.from),
+      to = boxes.box(link.to);
+    // Inside one closed container, a relationship belongs to that
+    // container's own diagram.
+    if (from && from === to && level !== undefined) continue;
+    if (!from || !to || from === to || contains(from, to) || contains(to, from)) {
       internalLinks++;
       continue;
     }
-    const key = JSON.stringify([link.from, link.to, link.kind]);
-    const pair = pairs.get(key) ?? { from: link.from, to: link.to, type: link.kind, links: [] };
+    context(from);
+    context(to);
+    const key = JSON.stringify([from, to, link.kind]);
+    const pair = pairs.get(key) ?? { from, to, type: link.kind, links: [] };
     pair.links.push(link);
     pairs.set(key, pair);
   }
+  // A comment's dashed line anchors it to the box its subject is drawn as.
+  // The whole plan draws every comment; a level draws those whose subject
+  // has a box there.
+  const isComment = (id: string) => drawn.includes(byId.get(id)?.kind ?? "");
+  const boxShown = (id: string) => {
+    const box = boxes.box(id);
+    return box && shown.has(box) ? box : null;
+  };
+  const comments = doc.records.filter(
+    (r) =>
+      isComment(r.id) &&
+      (level === undefined ||
+        doc.links.some(
+          (l) =>
+            anchorKinds.includes(l.kind) &&
+            ((l.from === r.id && boxShown(l.to)) || (l.to === r.id && boxShown(l.from))),
+        )),
+  );
+  nodes.push(...comments.map((r) => comment(r, status(r), sizes)));
+  for (const r of comments) shown.add(r.id);
+  const end = (id: string) => (isComment(id) ? (shown.has(id) ? id : null) : boxShown(id));
+  const anchors = doc.links.flatMap((link) => {
+    if (!anchorKinds.includes(link.kind)) return [];
+    const from = end(link.from),
+      to = end(link.to);
+    return from && to ? [{ link, from, to }] : [];
+  });
   const title = (id: string) => byId.get(id)?.title ?? id;
   const edges: StructuralEdge[] = [
     ...[...pairs.values()].map(({ from, to, type, links }) => ({
@@ -218,10 +258,10 @@ export function projectStructural(
           }
         : {}),
     })),
-    ...anchors.map((link) => ({
+    ...anchors.map(({ link, from, to }) => ({
       id: link.id,
-      from: link.from,
-      to: link.to,
+      from,
+      to,
       type: "anchor",
       title: link.kind.replaceAll("-", " "),
       kind: "Relationship",

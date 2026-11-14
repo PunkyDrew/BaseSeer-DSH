@@ -7,7 +7,8 @@ import {
   groupConnections,
   connectionDetailGroups,
 } from "./connection-groups.ts";
-import { SourceFileDetail } from "./code-file-detail.tsx";
+import { SourceFileDetail, FolderDetail } from "./code-file-detail.tsx";
+import { folderPath, hasPart, nearestFolder } from "./code-projection.ts";
 import {
   SourcePreview,
   CoverageDetails,
@@ -52,13 +53,13 @@ export function CodeView({
   onRecord?: (id: string) => void;
 }) {
   const [selected, setSelected] = useState(navigation?.selected ?? ""),
-    [folder, setFolder] = useState(navigation?.folder ?? ""),
+    [level, setLevel] = useState(navigation?.level ?? ""),
     [dependencies, setDependencies] = useState(
       navigation?.dependencies ?? true,
     );
   useEffect(() => {
-    onNavigation?.({ selected, folder, dependencies });
-  }, [selected, folder, dependencies]);
+    onNavigation?.({ selected, level, dependencies });
+  }, [selected, level, dependencies]);
   const [source, setSource] = useState<{
     path: string;
     content: string;
@@ -71,8 +72,6 @@ export function CodeView({
   const [mapView, setMapView] = useState(projectMode ? "components" : "files"),
     [connectionId, setConnectionId] = useState("");
   const [scope, setScope] = useState(""),
-    [search, setSearch] = useState(""),
-    [filePage, setFilePage] = useState(0),
     [omissionPage, setOmissionPage] = useState(0);
 
   const sourceRequest = useRef(0);
@@ -101,12 +100,8 @@ export function CodeView({
     onSnapshot: (next) => {
       ++sourceRequest.current;
       setSource(null);
-      setSelected((prior) =>
-        next.files.some((f) => f.path === prior) ? prior : "",
-      );
-      setFolder((prior) =>
-        next.files.some((f) => f.path.startsWith(prior + "/")) ? prior : "",
-      );
+      setSelected((prior) => (hasPart(next, prior) ? prior : ""));
+      setLevel((prior) => nearestFolder(next, prior));
     },
   });
   useEffect(() => {
@@ -136,40 +131,32 @@ export function CodeView({
   );
   const focused = connected ? (neighborhood?.focus ?? "") : selected;
   const file = snapshot?.files.find((f) => f.path === focused);
+  const chosenFolder = folderPath(focused);
+  // Drawn: the focus with what it depends on and what depends on it. Links between
+  // its neighbours would tangle the picture, so they stay in the lists beside it.
   const connectionGroups = useMemo(
-    () => groupConnections(neighborhood?.connections ?? []),
+    () =>
+      groupConnections(
+        neighborhood?.connections.filter(
+          (c) => c.from === neighborhood.focus || c.to === neighborhood.focus,
+        ) ?? [],
+      ),
     [neighborhood],
   );
+  const undrawnLinks =
+    (neighborhood?.connections.length ?? 0) -
+    connectionGroups.reduce((n, group) => n + group.items.length, 0);
   const detailGroups = useMemo(
     () => (neighborhood ? connectionDetailGroups(neighborhood) : []),
     [neighborhood],
   );
   useEffect(() => setConnectionId(""), [snapshot?.digest, selected, mapView]);
-  const visibleFiles =
-    snapshot?.files.filter((f) => !folder || f.path.startsWith(folder + "/")) ??
-    [];
-  const matchingFiles = visibleFiles.filter((f) =>
-    f.path.toLowerCase().includes(search.toLowerCase()),
-  );
-  useEffect(() => setFilePage(0), [folder, search, snapshot?.digest]);
   useEffect(() => setOmissionPage(0), [snapshot?.digest]);
-  const folders = [
-    ...new Set(
-      visibleFiles
-        .map((f) => {
-          const rest = folder ? f.path.slice(folder.length + 1) : f.path;
-          return rest.includes("/")
-            ? [folder, rest.split("/")[0]].filter(Boolean).join("/")
-            : "";
-        })
-        .filter(Boolean),
-    ),
-  ];
-  const chooseFolder = (next: string) => {
-    setMapView("files");
+  // Opening a level, or jumping to a part found by search, replaces what was chosen.
+  const openLevel = (next: string, chosen = "") => {
     ++sourceRequest.current;
-    setFolder(next);
-    setSelected("");
+    setLevel(next);
+    setSelected(chosen);
     setSource(null);
   };
   const chooseFile = (next: string) => {
@@ -285,21 +272,19 @@ export function CodeView({
                 aria-pressed={componentMode}
                 onClick={() => setMapView("components")}
               >
-                {componentMode ? "Selected: Components" : "Components"}
+                Components
               </button>
               <button
                 aria-pressed={connected}
                 onClick={() => setMapView("connections")}
               >
-                {connected ? "Selected: File connections" : "File connections"}
+                File connections
               </button>
               <button
                 aria-pressed={!componentMode && !connected}
                 onClick={() => setMapView("files")}
               >
-                {!componentMode && !connected
-                  ? "Selected: Files and folders"
-                  : "Files and folders"}
+                Files and folders
               </button>
             </div>
           )}
@@ -349,13 +334,22 @@ export function CodeView({
                       not prove an independent module.
                     </p>
                   )}
-                  {(neighborhood.omitted > 0 ||
-                    neighborhood.omittedConnections > 0) && (
+                  {neighborhood.omitted > 0 && (
                     <p role="status">
                       This view omits {neighborhood.omitted} neighboring files
-                      and {neighborhood.omittedConnections} links to keep the
-                      graph readable. Incoming and outgoing details remain
-                      listed below.
+                      to keep the graph readable. Their links to this file
+                      remain listed below.
+                    </p>
+                  )}
+                  {undrawnLinks > 0 && (
+                    <p role="status">
+                      {undrawnLinks} links between the neighboring files are
+                      not drawn, so the picture stays readable; they are
+                      listed below
+                      {neighborhood.omittedConnections > 0
+                        ? `, except ${neighborhood.omittedConnections} beyond the first 200`
+                        : ""}
+                      .
                     </p>
                   )}
                 </section>
@@ -369,78 +363,7 @@ export function CodeView({
                   />
                   Show dependency links
                 </label>
-                <button aria-pressed={!folder} onClick={() => chooseFolder("")}>
-                  All folders
-                </button>
-                {folder && (
-                  <>
-                    <button
-                      onClick={() =>
-                        chooseFolder(folder.split("/").slice(0, -1).join("/"))
-                      }
-                    >
-                      Up one folder
-                    </button>
-                    <span className="bpv-muted">{folder}/</span>
-                  </>
-                )}
-                {folders.map((name) => (
-                  <button
-                    key={name}
-                    aria-pressed={folder === name}
-                    onClick={() => chooseFolder(name)}
-                  >
-                    {name.slice(folder ? folder.length + 1 : 0)}/
-                  </button>
-                ))}
               </div>
-              {visibleFiles.length > 0 && (
-                <details className="bpc-files" key={folder}>
-                  <summary>Browse {visibleFiles.length} files</summary>
-                  <label>
-                    Find a file{" "}
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                  </label>
-                  <ul>
-                    {matchingFiles
-                      .slice(filePage * 100, (filePage + 1) * 100)
-                      .map((f) => (
-                        <li key={f.path}>
-                          <button
-                            className="bpv-link"
-                            onClick={(event) => {
-                              chooseFile(f.path);
-                              event.currentTarget
-                                .closest("details")
-                                ?.removeAttribute("open");
-                            }}
-                          >
-                            {f.path}
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                  <p>
-                    {matchingFiles.length} matching files. Page {filePage + 1}{" "}
-                    of {Math.max(1, Math.ceil(matchingFiles.length / 100))}.
-                  </p>
-                  <button
-                    disabled={!filePage}
-                    onClick={() => setFilePage((p) => p - 1)}
-                  >
-                    Previous files
-                  </button>{" "}
-                  <button
-                    disabled={(filePage + 1) * 100 >= matchingFiles.length}
-                    onClick={() => setFilePage((p) => p + 1)}
-                  >
-                    Next files
-                  </button>
-                </details>
-              )}
               <p className="bpv-muted bpc-coverage">
                 Observed source ·{" "}
                 {snapshot.analysis
@@ -463,18 +386,21 @@ export function CodeView({
                   </p>
                 </div>
               ) : (
-                <div className="bpc-layout" data-detail={file ? "" : undefined}>
+                <div
+                  className="bpc-layout"
+                  data-detail={file || chosenFolder !== null ? "" : undefined}
+                >
                   <CodeGraph
                     key={connected ? "connections" : "files"}
-                    grouped={projectMode && !connected}
-                    onFolder={chooseFolder}
+                    onLevel={openLevel}
                     snapshot={
                       connected && neighborhood
                         ? { ...snapshot, files: neighborhood.files }
                         : snapshot
                     }
+                    searchable={connected ? snapshot : undefined}
                     selected={focused}
-                    folder={connected ? "" : folder}
+                    level={connected ? "" : level}
                     relationshipConnections={
                       connected ? connectionGroups : undefined
                     }
@@ -490,6 +416,14 @@ export function CodeView({
                       if (!connected) onNavigation?.(value);
                     }}
                   />
+                  {chosenFolder !== null && !connected && (
+                    <FolderDetail
+                      snapshot={snapshot}
+                      path={chosenFolder}
+                      onOpen={() => openLevel(chosenFolder)}
+                      onClose={() => setSelected("")}
+                    />
+                  )}
                   {file && (
                     <SourceFileDetail
                       file={file}
@@ -539,11 +473,9 @@ export function CodeView({
 const codeStyles = `
 .bpc-status { flex-wrap:wrap; display:flex; justify-content:space-between; align-items:flex-start; gap:12px 18px; }
 .bpc-status h2 { margin:0; } .bpc-status p { margin:2px 0 8px; }
-.bpc-project { margin:16px 0 24px; max-width:80ch; } .bpc-project label,.bpc-files label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; } .bpc-project article { margin:18px 0; } .bpc-project details { margin:12px 0; }
-.bpc-controls { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:8px 0; }
-.bpc-files summary { margin-top:6px; font-size:13px; }
-.bpc-files ul { max-height:180px; overflow:auto; margin:6px 0; }
-.bpc-controls button { font-size:12px; padding:4px 10px; min-height:32px; }
+.bpc>p { margin:4px 0; }
+.bpc-project { margin:16px 0 24px; max-width:80ch; } .bpc-project label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; } .bpc-project article { margin:18px 0; } .bpc-project details { margin:12px 0; }
+.bpc-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0; }
 .bpc-coverage { margin:6px 0 0!important; max-width:none!important; }
 .bpc a { color:var(--blue); text-underline-offset:3px; }
 .bpc-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin:12px 0; }

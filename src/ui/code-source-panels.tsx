@@ -1,4 +1,4 @@
-// Source preview, coverage and project-baseline panels, split from code-view.tsx. Moved verbatim.
+// Source preview, coverage and project-baseline panels shown under the code map.
 import React from "react";
 import type { CodeSnapshot } from "../contracts/code.ts";
 import type { MapStatus, ScanProgress } from "../contracts/project-map.ts";
@@ -61,9 +61,9 @@ export function CoverageDetails({
         ))}
       </ul>
       <p>
-        Blue nodes have supported syntax; dashed nodes have source-only
-        coverage; amber nodes have parse errors. File size and declaration
-        counts are measurements, not “god file” verdicts.
+        Dashed boxes have source-only coverage; boxes with a red outline have
+        parse errors. File size and declaration counts are measurements, not
+        “god file” verdicts.
       </p>
       <ul>
         {snapshot.omissions

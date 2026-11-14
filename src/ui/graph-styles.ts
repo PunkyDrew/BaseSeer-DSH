@@ -50,16 +50,42 @@ export const graphStyles = `
 .bpg-controls-title { flex:1 1 auto; min-width:0; padding-right:8px; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bpg .bpg-controls button { min-height:36px; min-width:36px; padding:0 9px; border:0; border-radius:2px; background:transparent; color:var(--ink); font:600 13px/1.3 var(--lettering); display:grid; place-items:center; white-space:nowrap; }
 .bpg .bpg-controls button:hover { background:var(--paper-2); }
-.bpg .bpg-controls button[aria-expanded=true] { background:var(--ink); color:var(--paper); }
+.bpg .bpg-controls button[aria-expanded=true],.bpg .bpg-controls button[aria-pressed=true] { background:var(--ink); color:var(--paper); }
 .bpg .bpg-controls button svg { width:14px; height:14px; }
 .bpg-controls .bpg-pop { position:absolute; right:8px; bottom:calc(100% + 6px); width:min(340px,100cqw - 16px); max-height:calc(100cqh - 120px); overflow:auto; padding:12px 14px; border:1px solid var(--hair-2); background:var(--paper); color:var(--ink); font-size:13px; }
 .bpg-pop p,.bpg-pop li { font-size:13px; line-height:1.45; margin:0 0 8px; max-width:none; }
 .bpg-pop ul { margin:0; padding-left:18px; }
 .bpg-pop ul li:last-child { margin-bottom:0; }
+/* The level shown, as a path back up; the last step is where the drawing is. */
+.bpg-crumbs { flex:1 1 auto; min-width:0; overflow:hidden; }
+.bpg-crumbs ol { display:flex; align-items:center; margin:0; padding:0; list-style:none; min-width:0; }
+.bpg-crumbs li { display:flex; align-items:center; min-width:0; flex:0 1 auto; font-size:14px; }
+.bpg-crumbs li+li::before { content:"/"; padding:0 6px; color:var(--ink-3); }
+.bpg-crumbs li:last-child { flex-shrink:0; max-width:60%; }
+.bpg .bpg-crumbs button { min-width:0!important; padding:0 4px; font-weight:500; color:var(--blue); overflow:hidden; text-overflow:ellipsis; display:block; }
+.bpg-crumbs span { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bpg-find { display:grid; gap:4px; font-weight:600; }
+.bpg-find input { min-height:36px; padding:0 10px; border:1px solid var(--hair-2); border-radius:0; background:var(--paper); color:var(--ink); font:500 14px var(--lettering); }
+.bpg-find input:focus-visible { outline:2px solid var(--blue); outline-offset:1px; }
+.bpg-pop [role=status] { margin:10px 0 0; color:var(--ink-2); }
+ul.bpg-found { list-style:none; margin:8px 0 0; padding:0; }
+.bpg-found li { margin:0!important; }
+.bpg .bpg-controls .bpg-found button { display:block; width:100%; padding:6px 8px; text-align:left; font-weight:500; }
+.bpg-found strong { display:block; font-weight:600; }
+.bpg-found span { display:block; font-size:12.5px; color:var(--ink-2); }
+
+/* The minimap, when shown, sits in the drawing's corner above the bar. */
+.bpg-minimap { position:absolute; right:10px; bottom:50px; z-index:4; border:1px solid var(--hair-2); background:color-mix(in srgb,var(--paper) 80%,transparent); cursor:pointer; touch-action:none; }
+/* What the map covers shows through it until the pointer is on it. */
+.bpg-minimap:not(:hover) { opacity:.75; }
+.bpg-minimap rect { fill:var(--hair); }
+.bpg-minimap rect.bpg-minimap-view { fill:var(--paper-2); fill-opacity:.7; stroke:var(--ink); stroke-width:2; }
 @container canvas (max-width: 420px) {
   .bpg-controls { padding-left:4px; }
   .bpg-controls-title { display:none; }
+  .bpg-crumbs li:not(:nth-last-child(-n+2)) { display:none; }
 }
+@container canvas (max-width: 520px) { .bpg-minimap,.bpg-map-toggle { display:none!important; } }
 
 /* The key of the folded pictures and the Code map: each kind of box and arrow as it is drawn. */
 .bpg-key { position:relative; font-size:12.5px; line-height:1.5; margin:0 0 10px; color:var(--ink); }
@@ -89,7 +115,7 @@ ul.bpg-notation-key { list-style:none; margin:0 0 8px; padding:0; }
 /* The standard notations: one drawing, panned and zoomed by the frame. */
 .bpg-frame { touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; }
 .bpg-frame[data-dragging] { cursor:grabbing; }
-.bpg-frame>svg { display:block; width:100%; flex:1 1 0; min-height:0; color:var(--ink-2); }
+.bpg-frame>svg:not(.bpg-minimap) { display:block; width:100%; flex:1 1 0; min-height:0; color:var(--ink-2); }
 .bpg-frame svg text { font-family:var(--lettering); font-size:12.5px; fill:var(--ink); stroke:none; }
 .bpg-frame g[role=button] { cursor:pointer; }
 @media (hover:hover) { .bpg-frame g[role=button]:hover text { text-decoration:underline; } }
@@ -119,6 +145,8 @@ ul.bpg-notation-key { list-style:none; margin:0 0 8px; padding:0; }
 .bpg-structural-node[data-symbol=comment] .bpg-structural-card p { -webkit-line-clamp:3; }
 .bpg-structural-node[data-boundary] .bpg-structural-card { padding-bottom:0; }
 .bpg-structural-node .bpg-uml-icon rect { fill:var(--paper); stroke:var(--k); stroke-width:1; }
+.bpg-structural-node[data-folded] rect { stroke-width:2.5; }
+.bpg-structural-card .bpg-holds { display:block; margin:8px -12px 0; padding:5px 12px 0; border-top:1px solid var(--k); font-size:12.5px; font-weight:600; text-align:center; }
 .bpg-uml-name { text-align:center; }
 .bpg-uml-name>strong { display:block; font-size:14px; line-height:1.25; font-weight:600; }
 .bpg-structural-card p.bpg-uml-compartment { margin:8px -12px 0; padding:6px 12px 0; border-top:1px solid var(--k); }

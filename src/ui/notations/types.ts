@@ -41,6 +41,8 @@ export interface StructuralNode extends GraphItem {
   parent: string | null;
   /** True when other displayed nodes sit inside this one. */
   boundary: boolean;
+  /** How many parts a closed container holds; opening it shows them in its own diagram. */
+  folded?: number;
 }
 export interface StructuralEdge extends GraphItem {
   from: string;

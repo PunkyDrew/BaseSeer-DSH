@@ -1,14 +1,15 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { GraphControls } from "../graph-controls.tsx";
+import { GraphControls, type LevelControls } from "../graph-controls.tsx";
+import { usePhoneInput } from "../use-phone-input.ts";
+import { minimapView } from "./diagram-navigation.ts";
 import type { Rect } from "./types.ts";
 
 type Camera = { x: number; y: number; k: number };
 const MIN_ZOOM = 0.1,
   MAX_ZOOM = 2.5,
   PADDING = 24;
-/** Below this the labels cannot be read; a drawing that would fit smaller opens on its start, and Fit still shows it whole. */
-const READABLE = 0.7,
-  START_ZOOM = 0.9;
+/** Below this the labels cannot be read; a drawing that would fit smaller opens as wide as reads, and Fit still shows it whole. */
+const READABLE = 0.7;
 
 // The frame of a notation drawing: the drawing is panned by dragging, zoomed
 // with the wheel, a pinch, the keyboard or the controls, and placed whenever
@@ -28,6 +29,10 @@ export function DiagramFrame({
   opening,
   inset = 0,
   title,
+  outline = [],
+  levels,
+  onEscape,
+  onClear,
   children,
 }: {
   viewBox: Rect;
@@ -42,7 +47,7 @@ export function DiagramFrame({
   reveal?: Rect;
   /** A header row of the drawing, from its top edge in drawing coordinates, held at the frame's top when panned past it. */
   pinned?: { top: number; content: React.ReactNode };
-  /** Where a drawing too large to read whole opens; its top left corner otherwise. */
+  /** What a drawing too large to read whole keeps in view as it opens from its top left corner. */
   start?: Rect;
   /** What the drawing opens on when it fits readably: the drawing without what stands beside it (notes), which Fit includes. */
   opening?: Rect;
@@ -50,13 +55,25 @@ export function DiagramFrame({
   inset?: number;
   /** The drawing's name, in the bar under it. */
   title: string;
+  /** The boxes the minimap draws; a drawing without them has no minimap. */
+  outline?: Rect[];
+  /** The level shown and finding a part, for a drawing opened level by level. */
+  levels?: LevelControls;
+  /** Escape anywhere in the drawing: clear its focus, else go up a level. */
+  onEscape?: () => void;
+  /** A click or tap on the drawing's empty space, which is not the end of a drag. */
+  onClear?: () => void;
   children: React.ReactNode;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
+  const [view, setView] = useState({ width: 0, height: 0 });
+  const phone = usePhoneInput();
   const placed = useRef(false);
   placed.current = camera !== null;
   const [dragging, setDragging] = useState(false);
+  const [mapShown, setMapShown] = useState(true);
+  const hasMap = outline.length > 0 && !phone;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const moved = useRef(false);
   // The bar of controls takes the frame's bottom; the drawing area is what it leaves.
@@ -72,50 +89,69 @@ export function DiagramFrame({
       (height - 2 * PADDING) / target.height,
       1,
     );
-    setCamera(
-      always || whole >= READABLE
-        ? {
-            k: whole,
-            x: (el.clientWidth - target.width * whole) / 2 - target.x * whole,
-            y: (height - target.height * whole) / 2 - target.y * whole,
-          }
-        : start
-          ? {
-              // Centred on the start, from the drawing's top edge so its frame heading shows.
-              k: START_ZOOM,
-              x: el.clientWidth / 2 - (start.x + start.width / 2) * START_ZOOM,
-              y: PADDING - viewBox.y * START_ZOOM,
-            }
-          : {
-              k: START_ZOOM,
-              x: PADDING - viewBox.x * START_ZOOM,
-              y: PADDING - viewBox.y * START_ZOOM,
-            },
-    );
+    if (always || whole >= READABLE) {
+      setCamera({
+        k: whole,
+        x: (el.clientWidth - target.width * whole) / 2 - target.x * whole,
+        y: (height - target.height * whole) / 2 - target.y * whole,
+      });
+      return;
+    }
+    // Too large to read whole: as wide as reads, from the drawing's top edge so
+    // its frame heading shows, and the rest is scrolled to, as a page is.
+    const across = (el.clientWidth - 2 * PADDING) / viewBox.width;
+    const k = Math.min(1, Math.max(READABLE, across));
+    setCamera({
+      k,
+      x: placeAcross(el.clientWidth, k),
+      y: PADDING - viewBox.y * k,
+    });
+  };
+  // Centred when the drawing's width fits; otherwise from its left edge, where
+  // its frame heading is, moved only as far as keeps its start in view.
+  const placeAcross = (width: number, k: number) => {
+    if (viewBox.width * k <= width - 2 * PADDING)
+      return (width - viewBox.width * k) / 2 - viewBox.x * k;
+    const left = PADDING - viewBox.x * k;
+    if (!start) return left;
+    const overflow = left + (start.x + start.width) * k - (width - PADDING);
+    return overflow > 0 ? left - overflow : left;
   };
   // The drawing's bounds, by value: a drawing redrawn as it was keeps its camera.
   const bounds = [viewBox.x, viewBox.y, viewBox.width, viewBox.height];
-  useLayoutEffect(() => fit(), bounds);
+  // A level opened or left with the keys redraws without the box the keyboard
+  // was on; the keyboard stays in the frame rather than falling to the page.
+  const keyed = useRef(false);
+  useLayoutEffect(() => {
+    fit();
+    if (keyed.current && document.activeElement === document.body) frame.current?.focus();
+    keyed.current = false;
+  }, bounds);
   useLayoutEffect(() => {
     // A selection made elsewhere, or one a sheet now covers, is brought into
-    // the part of the frame that stays visible, at the zoom it is at.
+    // the part of the frame that stays visible, at the zoom it is at. It
+    // updates the camera rather than replacing it, so a drawing placed in the
+    // same commit (a level just opened) is the one it moves.
     const el = frame.current,
       target = selected ?? reveal;
     if (!target || !el || !camera) return;
-    const width = el.clientWidth,
-      height = el.clientHeight - Math.max(inset, strip(el));
-    const left = target.x * camera.k + camera.x,
-      top = target.y * camera.k + camera.y,
-      right = left + target.width * camera.k,
-      bottom = top + target.height * camera.k;
-    if (left >= 0 && top >= 0 && right <= width && bottom <= height) return;
-    setCamera({
-      k: camera.k,
-      x: width / 2 - (target.x + target.width / 2) * camera.k,
-      y:
-        target.height * camera.k > height - 2 * PADDING
-          ? height - PADDING - (target.y + target.height) * camera.k
-          : height / 2 - (target.y + target.height / 2) * camera.k,
+    setCamera((c) => {
+      if (!c) return c;
+      const width = el.clientWidth,
+        height = el.clientHeight - Math.max(inset, strip(el));
+      const left = target.x * c.k + c.x,
+        top = target.y * c.k + c.y,
+        right = left + target.width * c.k,
+        bottom = top + target.height * c.k;
+      if (left >= 0 && top >= 0 && right <= width && bottom <= height) return c;
+      return {
+        k: c.k,
+        x: width / 2 - (target.x + target.width / 2) * c.k,
+        y:
+          target.height * c.k > height - 2 * PADDING
+            ? height - PADDING - (target.y + target.height) * c.k
+            : height / 2 - (target.y + target.height / 2) * c.k,
+      };
     });
   }, [
     ...[selected ?? reveal].flatMap((t) => [t?.x, t?.y, t?.width, t?.height]),
@@ -133,6 +169,12 @@ export function DiagramFrame({
     });
   const panBy = (dx: number, dy: number) =>
     setCamera((c) => (c ? { ...c, x: c.x + dx, y: c.y + dy } : c));
+  const centreOn = (x: number, y: number) =>
+    setCamera((c) => {
+      const el = frame.current;
+      if (!c || !el) return c;
+      return { k: c.k, x: el.clientWidth / 2 - x * c.k, y: (el.clientHeight - strip(el)) / 2 - y * c.k };
+    });
   useEffect(() => {
     const el = frame.current;
     if (!el) return;
@@ -150,6 +192,7 @@ export function DiagramFrame({
     el.addEventListener("wheel", wheel, { passive: false });
     // A frame that had no size when the drawing arrived fits it once it has one.
     const observer = new ResizeObserver(() => {
+      setView({ width: el.clientWidth, height: el.clientHeight - strip(el) });
       if (!placed.current) fit();
     });
     observer.observe(el);
@@ -201,6 +244,15 @@ export function DiagramFrame({
     if (!pointers.current.size) setDragging(false);
   };
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Escape from anywhere in the drawing clears its focus or goes up; the
+    // bar's own popovers close on it themselves.
+    keyed.current = event.key === "Enter" || event.key === "Escape";
+    const inBar = (event.target as Element).closest(".bpg-controls");
+    if (event.key === "Escape" && onEscape && !inBar) {
+      event.preventDefault();
+      onEscape();
+      return;
+    }
     if (event.target !== event.currentTarget) return;
     const step = 48;
     const action: Record<string, () => void> = {
@@ -243,6 +295,11 @@ export function DiagramFrame({
           event.stopPropagation();
         }
       }}
+      onClick={(event) => {
+        const target = event.target as Element;
+        if (target.closest("[role=button], .bpg-controls, .bpg-minimap")) return;
+        onClear?.();
+      }}
       onKeyDown={onKeyDown}
     >
       <svg role="group" aria-label={svgLabel}>
@@ -259,6 +316,15 @@ export function DiagramFrame({
           </g>
         )}
       </svg>
+      {camera && hasMap && mapShown && view.width > 0 && (
+        <Minimap
+          drawing={viewBox}
+          outline={outline}
+          camera={camera}
+          view={view}
+          onCentre={centreOn}
+        />
+      )}
       <GraphControls
         onZoomIn={() => zoomBy(1.25)}
         onZoomOut={() => zoomBy(0.8)}
@@ -266,7 +332,74 @@ export function DiagramFrame({
         legend={legend}
         notes={notes}
         title={title}
+        levels={levels}
+        map={
+          hasMap
+            ? { shown: mapShown, onToggle: () => setMapShown((shown) => !shown) }
+            : undefined
+        }
       />
     </div>
+  );
+}
+
+const MAP = { width: 144, height: 96 };
+
+/**
+ * The whole drawing small, in the frame's corner above the bar, with the part
+ * in view outlined; pressing or dragging on it centres the view there.
+ */
+function Minimap({
+  drawing,
+  outline,
+  camera,
+  view,
+  onCentre,
+}: {
+  drawing: Rect;
+  outline: Rect[];
+  camera: Camera;
+  view: { width: number; height: number };
+  onCentre: (x: number, y: number) => void;
+}) {
+  const map = minimapView(drawing, camera, view, MAP);
+  // With the whole drawing in view there is nowhere to go, and the map would
+  // only cover a corner of it.
+  if (map.shown.width >= map.width - 1 && map.shown.height >= map.height - 1) return null;
+  const centre = (event: React.PointerEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    onCentre(
+      drawing.x + (event.clientX - box.left) / map.scale,
+      drawing.y + (event.clientY - box.top) / map.scale,
+    );
+  };
+  return (
+    <svg
+      className="bpg-minimap"
+      role="img"
+      aria-label="Minimap of the whole diagram"
+      width={map.width}
+      height={map.height}
+      onPointerDown={(event) => {
+        // The frame would take this as the start of a drag of the drawing.
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        centre(event);
+      }}
+      onPointerMove={(event) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) centre(event);
+      }}
+    >
+      {outline.map((box, index) => (
+        <rect
+          key={index}
+          x={(box.x - drawing.x) * map.scale}
+          y={(box.y - drawing.y) * map.scale}
+          width={box.width * map.scale}
+          height={box.height * map.scale}
+        />
+      ))}
+      <rect className="bpg-minimap-view" {...map.shown} />
+    </svg>
   );
 }

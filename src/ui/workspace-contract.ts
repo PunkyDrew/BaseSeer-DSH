@@ -76,9 +76,10 @@ export interface GraphNavigation {
   scenario?: string;
   /** The part whose flows the Behavior section breaks down; none shows every flow. */
   part?: string;
-  folder?: string;
   dependencies?: boolean;
   notation?: Notation;
+  /** The container whose diagram is open; empty or absent is the plan's top level. */
+  level?: string;
 }
 export interface WorkspacePlan {
   id: string;

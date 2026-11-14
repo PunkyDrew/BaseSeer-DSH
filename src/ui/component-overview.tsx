@@ -6,11 +6,11 @@ import type {
 import type { SourceConnection } from "../contracts/source-connections.ts";
 
 const basis = (c: MappedComponent) =>
-  c.basis === "source-inferred"
-    ? "Source-inferred · interpretation unchecked"
+  c.basis === "scanned"
+    ? "Planned files found in the scan · behavior unchecked"
     : c.basis === "historical"
       ? "Historical source binding"
-      : "No observed source mapping";
+      : "No planned file found in the scan";
 
 function PagedList<T>({
   items,
@@ -123,8 +123,8 @@ export function ComponentOverview({
         supporting source.
       </p>
       <p className="bpv-muted">
-        {mapped.length} source-bound components · {map.unassigned.length}{" "}
-        unassigned files · {map.ambiguous.length} shared files.{" "}
+        {mapped.length} components with files in the scan ·{" "}
+        {map.unassigned.length} files no component lists · {map.ambiguous.length} shared files.{" "}
         {map.partial && "Some source files were not checked. "}Purpose and
         ownership are inferred; execution is not established.
       </p>
@@ -182,7 +182,7 @@ export function ComponentOverview({
                       <strong>{c.title}</strong>
                       <span>
                         {c.paths.length
-                          ? `${c.paths.length} mapped files`
+                          ? `${c.paths.length} files in the scan`
                           : basis(c)}
                       </span>
                     </button>
@@ -331,7 +331,7 @@ export function ComponentOverview({
                         {path}
                       </button>
                       {!component.paths.includes(path) &&
-                        " · not bound to this inspection"}
+                        " · not in the scan"}
                     </li>
                   ))}
                 </ul>
@@ -377,7 +377,7 @@ export function ComponentOverview({
         <p>
           {map.exclusions} scan exclusions ·{" "}
           {map.components.filter((c) => !c.paths.length).length} components
-          without a source binding · {map.unplaced.length} unassigned
+          with no file in the scan · {map.unplaced.length} unassigned
           relationships · {map.historical.length} historical relationships ·{" "}
           {map.unresolved.length} imports without an inspected target.
         </p>

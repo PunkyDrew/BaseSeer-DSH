@@ -1,6 +1,6 @@
 import type { Document, PlanningRecord } from "../../domain/records.ts";
 import type { GraphItem } from "../graph-model.ts";
-import { containmentIndex } from "./structural.ts";
+import { containmentIndex } from "./levels.ts";
 import type { FlowMessage } from "./types.ts";
 
 // One reading of a scenario that the activity and sequence diagrams share, so

@@ -5,6 +5,7 @@ import {
 } from "../../domain/records.ts";
 import type { GraphSizes } from "../use-graph-measurements.ts";
 import { clip } from "./geometry.ts";
+import { partLevels, type DiagramLevel } from "./levels.ts";
 import { partNode } from "./structural.ts";
 import type {
   StructuralEdge,
@@ -60,19 +61,93 @@ function dataType(
   };
 }
 
-/** UML class diagram of the plan's records: each interface's shapes nested in it, the records that pass between parts, and each part's ownership and loose ends. */
+/**
+ * UML class diagram of the plan's records: each interface's shapes nested in
+ * it, the records that pass between parts, and each part's ownership and loose
+ * ends, level by level: the parts on the level shown, each container among
+ * them closed with what it passes to the boxes around it.
+ */
 export function projectRecords(
   doc: Document,
   status: (r: PlanningRecord) => string,
   sizes: GraphSizes = {},
+  level: DiagramLevel = "",
 ): StructuralProjection {
   const nodes: StructuralNode[] = [];
   const edges: StructuralEdge[] = [];
   const byId = new Map(doc.records.map((r) => [r.id, r]));
   const title = (id: string) => byId.get(id)?.title ?? id;
+  const names = (c: PlanningRecord, list: (typeof lists)[number]): string[] =>
+    c.data.contract?.[list] ?? [];
+  const given = (c: PlanningRecord) => [...names(c, "outputs"), ...names(c, "writes")];
+  const levels = partLevels(doc);
+  const namers = doc.records.filter(
+    (r) => r.kind === "component" && lists.some((list) => names(r, list).length),
+  );
+  // A part's box on this level: the part itself when it sits directly on the
+  // level, the closed container holding it, or a box outside the level.
+  const boxOf = (id: string) => levels.boxOn(id, level);
+  // The parts that show their own records here; what lies deeper stays
+  // inside its closed container.
+  const own = namers.filter((c) => levels.levelOf(c.id) === level);
+  const boxes = new Set(
+    namers.flatMap((c) => {
+      const box = levels.within(c.id, level) ? boxOf(c.id) : null;
+      return box ? [box] : [];
+    }),
+  );
+  // The pairs of parts a record can pass between: one uses the other, or an
+  // interface the other provides.
+  const provider = new Map<string, string>();
+  for (const l of doc.links)
+    if (l.kind === "implements" && !provider.has(l.to)) provider.set(l.to, l.from);
+  const linked = new Set<string>();
+  for (const l of doc.links)
+    if (l.kind === "uses") {
+      const to = provider.get(l.to) ?? l.to;
+      linked.add(`${l.from}>${to}`).add(`${to}>${l.from}`);
+    }
+  // Flows are found between the parts themselves, then drawn between their
+  // boxes on this level, so a closed container carries what its parts pass.
+  const flows = new Map<string, { from: string; to: string; names: string[] }>();
+  // A record's loose ends are the parts that give it out or take it in with
+  // no part at the other end anywhere in the plan.
+  const carried = new Set<string>();
+  const addFlow = (from: PlanningRecord, to: PlanningRecord, name: string) => {
+    if (!levels.within(from.id, level) && !levels.within(to.id, level)) return;
+    const fromBox = boxOf(from.id);
+    const toBox = boxOf(to.id);
+    if (!fromBox || !toBox || fromBox === toBox) return;
+    const flow = flows.get(`${fromBox}>${toBox}`) ?? { from: fromBox, to: toBox, names: [] };
+    if (!flow.names.some((n) => shapeName(n) === shapeName(name))) flow.names.push(name);
+    flows.set(`${fromBox}>${toBox}`, flow);
+    boxes.add(fromBox).add(toBox);
+  };
+  for (const from of namers)
+    for (const to of namers) {
+      if (from === to || !linked.has(`${from.id}>${to.id}`)) continue;
+      for (const name of given(from)) {
+        const key = shapeName(name);
+        if (!names(to, "inputs").some((n) => shapeName(n) === key)) continue;
+        carried.add(`${from.id}>${key}`).add(`${key}>${to.id}`);
+        addFlow(from, to, name);
+      }
+    }
+  const named = new Set([
+    ...own.flatMap((c) => lists.flatMap((list) => names(c, list).map(shapeName))),
+    ...[...flows.values()].flatMap((f) => f.names.map(shapeName)),
+  ]);
+  // An interface is drawn where its shapes are named, or on its own level
+  // when nothing names them, so the gap still shows somewhere.
+  const drawn = (iface: PlanningRecord) =>
+    levels.levelOf(iface.id) === level ||
+    iface.data.shapes.some((s: { name: string }) => named.has(shapeName(s.name)));
   // A name resolves to the first interface that shapes it.
   const shaped = new Map<string, string>();
-  for (const iface of doc.records.filter((r) => r.kind === "interface" && r.data.shapes?.length)) {
+  const interfaces = doc.records.filter(
+    (r) => r.kind === "interface" && r.data.shapes?.length && drawn(r),
+  );
+  for (const iface of interfaces) {
     nodes.push(partNode(iface, status(iface), sizes, null, true));
     for (const shape of iface.data.shapes) {
       const id = `${iface.id}/${shapeName(shape.name)}`;
@@ -90,40 +165,14 @@ export function projectRecords(
     }
     return unshaped.get(key)!;
   };
-  const names = (c: PlanningRecord, list: (typeof lists)[number]): string[] =>
-    c.data.contract?.[list] ?? [];
-  const given = (c: PlanningRecord) => [...names(c, "outputs"), ...names(c, "writes")];
-  const parts = doc.records.filter(
-    (r) => r.kind === "component" && lists.some((list) => names(r, list).length),
-  );
-  for (const c of parts) nodes.push(partNode(c, status(c), sizes, null, false));
-  // The pairs of parts a record can pass between: one uses the other, or an
-  // interface the other provides.
-  const provider = new Map<string, string>();
-  for (const l of doc.links)
-    if (l.kind === "implements" && !provider.has(l.to)) provider.set(l.to, l.from);
-  const linked = new Set<string>();
-  for (const l of doc.links)
-    if (l.kind === "uses") {
-      const to = provider.get(l.to) ?? l.to;
-      linked.add(`${l.from}>${to}`).add(`${to}>${l.from}`);
-    }
-  const flows = new Map<string, { from: string; to: string; names: string[] }>();
-  // A record's loose ends are the parts that give it out or take it in with
-  // no flow drawn for it.
-  const carried = new Set<string>();
-  for (const from of parts)
-    for (const to of parts) {
-      if (from === to || !linked.has(`${from.id}>${to.id}`)) continue;
-      for (const name of given(from)) {
-        const key = shapeName(name);
-        if (!names(to, "inputs").some((n) => shapeName(n) === key)) continue;
-        const flow = flows.get(`${from.id}>${to.id}`) ?? { from: from.id, to: to.id, names: [] };
-        if (!flow.names.some((n) => shapeName(n) === key)) flow.names.push(name);
-        flows.set(`${from.id}>${to.id}`, flow);
-        carried.add(`${from.id}>${key}`).add(`${key}>${to.id}`);
-      }
-    }
+  for (const id of boxes) {
+    const part = byId.get(id)!;
+    const folded = levels.inside(id);
+    nodes.push({
+      ...partNode(part, status(part), sizes, null, false),
+      ...(folded ? { folded } : {}),
+    });
+  }
   for (const { from, to, names } of flows.values())
     edges.push({
       id: `${from}>${to}:flow`,
@@ -149,7 +198,7 @@ export function projectRecords(
       label: type === "owns" ? [] : [`«${type}»`],
     });
   };
-  for (const c of parts) {
+  for (const c of own) {
     for (const name of names(c, "owns")) depend(c, name, "owns", `${c.title} owns ${name}.`);
     for (const name of names(c, "inputs"))
       if (!carried.has(`${shapeName(name)}>${c.id}`))

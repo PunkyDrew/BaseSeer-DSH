@@ -37,6 +37,7 @@ export function navigation(input: unknown = {}) {
       "selected",
       "dependencies",
       "notation",
+      "level",
     ]);
     const saved: any = {};
     if (g.notation !== undefined) {
@@ -61,7 +62,7 @@ export function navigation(input: unknown = {}) {
         Math.abs(v.x as number) > 1e7 ||
         Math.abs(v.y as number) > 1e7 ||
         (v.zoom as number) < 0.01 ||
-        (v.zoom as number) > 1.8
+        (v.zoom as number) > 2.5
       )
         throw new PlanError("INVALID", "Invalid graph viewport");
       saved.viewport = v;
@@ -76,7 +77,7 @@ export function navigation(input: unknown = {}) {
         throw new PlanError("INVALID", "Invalid relationship layer");
       saved.layers = layers;
     }
-    for (const field of ["scenario", "part", "selected", "folder"])
+    for (const field of ["scenario", "part", "selected", "folder", "level"])
       if (g[field] !== undefined) {
         const v = selection(g[field]);
         if (v && field === "folder") relative(v);

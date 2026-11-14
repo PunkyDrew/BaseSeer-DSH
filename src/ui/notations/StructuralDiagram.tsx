@@ -7,7 +7,9 @@ import {
   type GraphSizes,
   type ReportGraphSize,
 } from "../use-graph-measurements.ts";
+import type { LevelControls } from "../graph-controls.tsx";
 import { DiagramFrame } from "./DiagramFrame.tsx";
+import { arrowMove, escapeStep, focusBox } from "./diagram-navigation.ts";
 import { NotationEmpty } from "./NotationEmpty.tsx";
 import { clip, frameTag, pointsBounds } from "./geometry.ts";
 import { structuralLayout, type StructuralLayout } from "./structural-layout.ts";
@@ -67,6 +69,11 @@ function Card({ node }: { node: StructuralNode }) {
       {!node.boundary && !!node.files.length && (
         <p className="bpg-uml-compartment bpg-files">«artifacts» {fileSummary(node.files)}</p>
       )}
+      {node.folded && (
+        <span className="bpg-holds">
+          holds {node.folded} {node.folded === 1 ? "part" : "parts"}
+        </span>
+      )}
     </>
   );
 }
@@ -95,6 +102,8 @@ export function StructuralDiagram({
   legend,
   inset,
   title,
+  levels,
+  onOpen,
 }: {
   /** The projection for measured box sizes; called again when a box's size changes. */
   project: (sizes: GraphSizes) => StructuralProjection;
@@ -111,6 +120,10 @@ export function StructuralDiagram({
   legend: React.ReactNode;
   inset?: number;
   title: string;
+  /** The level drawn, for a diagram opened level by level. */
+  levels?: LevelControls;
+  /** Opens a closed container's own diagram. */
+  onOpen?: (id: string) => void;
 }) {
   const id = useId().replaceAll(":", "");
   const { sizes, report } = useGraphMeasurements();
@@ -148,21 +161,35 @@ export function StructuralDiagram({
         ? null
         : (items.find((i) => i.id === target) ?? null),
     );
+  const byId = new Map(projection.nodes.map((n) => [n.id, n]));
+  const closed = (target: string) => !!byId.get(target)?.folded && !!onOpen;
+  // Enter opens a closed container, and shows anything else's details.
+  const enter = (target: string) => {
+    if (closed(target)) return onOpen!(target);
+    if (target !== selected) choose(target);
+  };
   const selectProps = (target: string) => ({
     role: "button",
     tabIndex: 0,
     "aria-pressed": target === selected,
     onClick: () => choose(target),
+    onDoubleClick: () => closed(target) && onOpen!(target),
     onPointerEnter: () => setHovered(target),
     onPointerLeave: () => setHovered(""),
-    onKeyDown: (event: React.KeyboardEvent) => {
+    onKeyDown: (event: React.KeyboardEvent<SVGElement>) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        choose(target);
+        if (event.key === "Enter") enter(target);
+        else choose(target);
+        return;
       }
+      const next = arrowMove(event.key, boxes, target);
+      if (!next) return;
+      event.preventDefault();
+      focusBox(event.currentTarget, next);
+      choose(next);
     },
   });
-  const byId = new Map(projection.nodes.map((n) => [n.id, n]));
   const depth = (nodeId: string) => {
     let d = 0;
     for (let p = byId.get(nodeId)?.parent; p; p = byId.get(p)?.parent) d++;
@@ -191,6 +218,17 @@ export function StructuralDiagram({
     );
   const value = current.value;
   const route = value.routes.get(selected);
+  // The boxes the keys move between and the minimap draws: everything but
+  // the open container's frame.
+  const boxes = ordered
+    .filter((n) => !n.boundary)
+    .map((n) => ({ ...value.boxes.get(n.id)!, id: n.id }));
+  const level = levels?.path.at(-1)?.id ?? "";
+  const escape = () => {
+    const step = escapeStep(!!selected, level);
+    if (step === "clear") onSelect(null);
+    if (step === "up") levels!.onLevel(levels!.path.at(-2)?.id ?? "");
+  };
   // UML draws the diagram in a frame named by its tag.
   const box = value.viewBox;
   const tag = frameTag(box.x - 8, box.y - 36, `${kind} ${clip(heading, 70)}`);
@@ -209,14 +247,13 @@ export function StructuralDiagram({
         legend={legend}
         notes={projection.warnings}
         selected={value.boxes.get(selected) ?? (route && pointsBounds(route))}
-        start={
-          ordered
-            .filter((n) => !n.boundary)
-            .map((n) => value.boxes.get(n.id)!)
-            .sort((a, b) => a.y - b.y || a.x - b.x)[0]
-        }
+        start={[...boxes].sort((a, b) => a.y - b.y || a.x - b.x)[0]}
         inset={inset}
         title={title}
+        outline={boxes}
+        levels={levels}
+        onEscape={escape}
+        onClear={() => selected && onSelect(null)}
       >
         <defs>
           <marker id={`${id}-open`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -239,11 +276,13 @@ export function StructuralDiagram({
             <g
               key={n.id}
               {...selectProps(n.id)}
+              data-box={n.id}
+              data-folded={n.folded || undefined}
               data-symbol={n.symbol}
               data-kind={n.symbol === "comment" ? n.kind : undefined}
               data-external={n.external || undefined}
               data-boundary={n.boundary || undefined}
-              aria-label={`${n.typeLine} ${n.title}. ${n.status}.`}
+              aria-label={`${n.typeLine} ${n.title}.${n.status ? ` ${n.status}.` : ""}${n.folded ? ` Holds ${n.folded} parts; Enter opens it.` : ""}`}
               className={classes(n.id, "bpg-structural-node")}
             >
               {n.symbol === "comment" ? (

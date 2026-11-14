@@ -11,7 +11,7 @@ import type { Point, Rect, StructuralProjection } from "./types.ts";
 const Constructor = ELK as unknown as {
   new (options: ELKConstructorArguments): Engine;
 };
-const engine = new Constructor({ algorithms: ["layered"] });
+const engine = new Constructor({ algorithms: ["layered", "rectpacking"] });
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
 export interface StructuralLayout {
@@ -24,7 +24,7 @@ export interface StructuralLayout {
 // One compound layered layout: containers are ELK parents, so boundaries,
 // boxes and orthogonal routes come from the same pass. ROOT coordinates make
 // every shape and route absolute, independent of nesting depth. It reads top
-// to bottom, as C4 and UML diagrams usually do, so a phone scrolls it down.
+// to bottom, as UML diagrams usually do, so a phone scrolls it down.
 export async function structuralLayout(
   p: StructuralProjection,
 ): Promise<StructuralLayout> {
@@ -32,6 +32,7 @@ export async function structuralLayout(
   for (const n of p.nodes)
     children.set(n.parent, [...(children.get(n.parent) ?? []), n.id]);
   const byId = new Map(p.nodes.map((n) => [n.id, n]));
+  const joined = new Set(p.edges.flatMap((e) => [e.from, e.to]));
   const build = (id: string): ElkNode => {
     const node = byId.get(id)!,
       inner = children.get(id) ?? [];
@@ -41,9 +42,29 @@ export async function structuralLayout(
           layoutOptions: {
             "elk.padding": `[top=${node.height + 12},left=16,bottom=16,right=16]`,
           },
-          children: inner.map(build),
+          children: pack(id, inner),
         }
       : { id, width: node.width, height: node.height };
+  };
+  // Parts with no arrow at this level have no layer to go in, so layering
+  // would line them all up in one row; they are packed into a block instead.
+  const pack = (container: string, inner: string[]): ElkNode[] => {
+    const loose = new Set(inner.filter((id) => !joined.has(id) && !children.has(id)));
+    if (loose.size < 2) return inner.map(build);
+    return [
+      ...inner.filter((id) => !loose.has(id)).map(build),
+      {
+        id: `${container}:loose`,
+        layoutOptions: {
+          "elk.algorithm": "rectpacking",
+          "elk.hierarchyHandling": "SEPARATE_CHILDREN",
+          "elk.padding": "[top=0,left=0,bottom=0,right=0]",
+          "elk.spacing.nodeNode": "40",
+          "elk.aspectRatio": "1",
+        },
+        children: [...loose].map(build),
+      },
+    ];
   };
   const graph: ElkNode = {
     id: "diagram",
@@ -59,8 +80,12 @@ export async function structuralLayout(
       // used part is one line in, not a bundle of parallel ones.
       "elk.layered.mergeEdges": "true",
       "elk.layered.feedbackEdges": "false",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "90",
-      "elk.spacing.nodeNode": "60",
+      // Layers hold at most a few parts, so a level of many parts grows down,
+      // the way it scrolls, instead of into one row wider than any screen.
+      "elk.layered.layering.strategy": "MIN_WIDTH",
+      "elk.layered.layering.minWidth.upperBoundOnWidth": "3",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "72",
+      "elk.spacing.nodeNode": "40",
       "elk.spacing.edgeEdge": "18",
       "elk.spacing.edgeLabel": "4",
       "elk.spacing.labelLabel": "6",
@@ -70,7 +95,7 @@ export async function structuralLayout(
       "elk.padding": "[top=28,left=28,bottom=28,right=28]",
       "elk.randomSeed": "1",
     },
-    children: (children.get(null) ?? []).map(build),
+    children: pack("diagram", children.get(null) ?? []),
     edges: p.edges.map((e) => ({
       id: e.id,
       sources: [e.from],
@@ -92,7 +117,7 @@ export async function structuralLayout(
   const boxes = new Map<string, Rect>();
   const found: ElkExtendedEdge[] = [];
   const walk = (n: ElkNode) => {
-    if (n.id !== "diagram")
+    if (byId.has(n.id))
       boxes.set(n.id, {
         x: round(n.x!),
         y: round(n.y!),

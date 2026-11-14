@@ -201,9 +201,12 @@ export function connectionNeighborhood(
     .filter(Boolean)
     .slice(0, 80);
   const included = new Set(selected);
-  const edges = current.filter(
-    (c) => included.has(c.from) && included.has(c.to),
-  );
+  // The focus's own links come first, so bounding the rest never cuts them.
+  const touchesFocus = (c: SourceConnection) =>
+    Number(c.from === focus || c.to === focus);
+  const edges = current
+    .filter((c) => included.has(c.from) && included.has(c.to))
+    .sort((a, b) => touchesFocus(b) - touchesFocus(a));
   return {
     focus,
     files: selected.map((n) => known.get(n)!),

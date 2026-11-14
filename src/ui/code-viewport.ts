@@ -1,13 +1,25 @@
 import type { LayoutInput } from "./layered-layout.ts";
 
+// The same opening rule as every other picture (see DiagramFrame): a drawing
+// that fits at a readable size opens whole, centred and as large as the frame
+// allows; a larger one opens at a readable size on its start box.
+const PADDING = 24,
+  READABLE = 0.7,
+  START_ZOOM = 0.9,
+  WIDTH_FLOOR = 0.6;
+
+type Box = { x: number; y: number; width: number; height: number };
+
 // React Flow's node-only fit excludes routed bends and connection labels.
 // Include those bounds so fitting the overview cannot clip its explanations.
 export function codeViewport(
   layout: LayoutInput,
   width: number,
   height: number,
+  { always = false, start }: { always?: boolean; start?: Box } = {},
 ) {
-  if (!layout.nodes.length || width <= 48 || height <= 48) return undefined;
+  if (!layout.nodes.length || width <= 2 * PADDING || height <= 2 * PADDING)
+    return undefined;
   const boxes = [
     ...layout.nodes,
     ...layout.edges.flatMap((edge) => [
@@ -32,13 +44,37 @@ export function codeViewport(
     top = Math.min(...boxes.map((b) => b.y));
   const w = Math.max(...boxes.map((b) => b.x + b.width)) - left,
     h = Math.max(...boxes.map((b) => b.y + b.height)) - top;
-  const zoom = Math.max(
+  const whole = Math.max(
     0.01,
-    Math.min(1, (width - 48) / Math.max(1, w), (height - 48) / Math.max(1, h)),
+    Math.min(
+      1,
+      (width - 2 * PADDING) / Math.max(1, w),
+      (height - 2 * PADDING) / Math.max(1, h),
+    ),
   );
+  if (!always && whole < READABLE) {
+    // Too large to read whole: the full width where text stays legible, else centred on the
+    // start box (or from the top left).
+    const zoom = Math.min(
+      START_ZOOM,
+      Math.max(WIDTH_FLOOR, (width - 2 * PADDING) / Math.max(1, w)),
+    );
+    const fitsWidth = w * zoom <= width - 2 * PADDING;
+    return {
+      x: fitsWidth
+        ? (width - w * zoom) / 2 - left * zoom
+        : start
+          ? width / 2 - (start.x + start.width / 2) * zoom
+          : PADDING - left * zoom,
+      y: start
+        ? height / 2 - (start.y + start.height / 2) * zoom
+        : PADDING - top * zoom,
+      zoom,
+    };
+  }
   return {
-    x: (width - w * zoom) / 2 - left * zoom,
-    y: (height - h * zoom) / 2 - top * zoom,
-    zoom,
+    x: (width - w * whole) / 2 - left * whole,
+    y: (height - h * whole) / 2 - top * whole,
+    zoom: whole,
   };
 }

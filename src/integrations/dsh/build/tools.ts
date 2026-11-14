@@ -348,7 +348,7 @@ export function buildMessageTool(agent: any, peers: () => Peer[]) {
       peer.agent.steer({
         id: randomUUID(),
         role: "user",
-        source: { kind: "plugin", plugin: "baseseer-build-message" },
+        source: { kind: "baseseer-build-message" },
         content: [
           {
             type: "text",

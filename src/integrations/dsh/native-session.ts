@@ -14,7 +14,7 @@ export interface NativeWorkspace {
 export interface NativeUserMessage {
   id: string;
   role: "user";
-  source: { kind: string; plugin?: string };
+  source: { kind: string };
   content: readonly { type: string; text?: string }[];
 }
 export interface NativeAgent {

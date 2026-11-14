@@ -107,7 +107,7 @@ export function plannerArgumentFeedback(
       pending.push({
         id: messageId,
         role: "user",
-        source: { kind: "plugin", plugin: "baseseer-tool-validation" },
+        source: { kind: "baseseer-tool-validation" },
         content: [
           {
             type: "text",

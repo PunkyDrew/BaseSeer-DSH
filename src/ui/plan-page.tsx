@@ -116,6 +116,13 @@ export function PlanPage({
   // a level whose container has gone opens the nearest one above it.
   const parts = useMemo(() => partLevels(doc), [signature]);
   const level = parts.usable(navigation.level ?? "");
+  // The level shown in its place is saved, so the note saying so shows once.
+  const [levelGone, setLevelGone] = useState(false);
+  useEffect(() => {
+    if (!navigation.level || level === navigation.level) return;
+    setLevelGone(true);
+    onNavigation({ level });
+  }, [level, navigation.level]);
   // A diagram element carries more than its record (a step, a merged arrow,
   // a rolled-up box); the diagram reports it when the selection is made there.
   const [graphItem, setGraphItem] = useState<GraphItem | null>(null);
@@ -170,11 +177,13 @@ export function PlanPage({
   }, [selected]);
   const openLevel = (id: string) => {
     setGraphItem(null);
+    setLevelGone(false);
     onNavigation({ level: id, selected: "" });
   };
   // A part found or chosen from the list is shown on the level it is drawn on.
   const showPart = (id: string) => {
     setGraphItem(null);
+    setLevelGone(false);
     onNavigation({ level: parts.levelOf(id), selected: id });
   };
   const levelControls: LevelControls = {
@@ -187,6 +196,7 @@ export function PlanPage({
         where: [plan.title, ...match.path.map((step) => step.title)].join(" › "),
       })),
     onFind: showPart,
+    gone: levelGone,
   };
   const chooseView = (view: View) => {
     setGraphItem(null);

@@ -101,7 +101,6 @@ export function CodeView({
       ++sourceRequest.current;
       setSource(null);
       setSelected((prior) => (hasPart(next, prior) ? prior : ""));
-      setLevel((prior) => nearestFolder(next, prior));
     },
   });
   useEffect(() => {
@@ -110,6 +109,16 @@ export function CodeView({
       ++sourceRequest.current;
     };
   }, [active]);
+  // A saved folder that was removed or renamed opens the nearest one above it,
+  // which says so once: the folder shown in its place is saved.
+  const [levelGone, setLevelGone] = useState(false);
+  useEffect(() => {
+    if (!snapshot) return;
+    const nearest = nearestFolder(snapshot, level);
+    if (nearest === level) return;
+    setLevelGone(true);
+    setLevel(nearest);
+  }, [snapshot, level]);
   const connected = projectMode && mapView === "connections";
   const componentMode = projectMode && mapView === "components";
   const components = useMemo(
@@ -155,6 +164,7 @@ export function CodeView({
   // Opening a level, or jumping to a part found by search, replaces what was chosen.
   const openLevel = (next: string, chosen = "") => {
     ++sourceRequest.current;
+    setLevelGone(false);
     setLevel(next);
     setSelected(chosen);
     setSource(null);
@@ -401,6 +411,7 @@ export function CodeView({
                     searchable={connected ? snapshot : undefined}
                     selected={focused}
                     level={connected ? "" : level}
+                    levelGone={!connected && levelGone}
                     relationshipConnections={
                       connected ? connectionGroups : undefined
                     }

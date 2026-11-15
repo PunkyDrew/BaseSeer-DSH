@@ -163,18 +163,6 @@ export function WorkspacePanel({
     return (
       <div className="bpv-page">
         {messages}
-        {records.some((r) =>
-          ["claim", "evidence", "finding", "analysis"].includes(r.kind),
-        ) && fold("Review", "Checks and evidence as a diagram")}
-        <ReviewView
-          active={active}
-          call={call}
-          sessionId={sessionId}
-          projectMode={!!state.projectMap}
-          refreshKey={[plan.revision, changes.version]}
-          onOpenSource={openSource}
-          onSelect={open}
-        />
         <CodeView
           document={plan.document}
           recordRevision={plan.revision}
@@ -193,6 +181,18 @@ export function WorkspacePanel({
           onNavigation={(v) =>
             setGraphs((p) => ({ ...p, Code: { ...p.Code, ...v } }))
           }
+        />
+        {records.some((r) =>
+          ["claim", "evidence", "finding", "analysis"].includes(r.kind),
+        ) && fold("Review", "Checks and evidence as a diagram")}
+        <ReviewView
+          active={active}
+          call={call}
+          sessionId={sessionId}
+          projectMode={!!state.projectMap}
+          refreshKey={[plan.revision, changes.version]}
+          onOpenSource={openSource}
+          onSelect={open}
         />
       </div>
     );

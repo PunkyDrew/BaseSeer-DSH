@@ -27,6 +27,8 @@ export type LevelControls = {
   onFind: (id: string) => void;
   /** What a box is called in this picture: a part, or on the Code map a file. */
   noun?: string;
+  /** The level saved to reopen was removed or renamed, so the nearest one above it is shown. */
+  gone?: boolean;
 };
 
 /** The way up from the level shown: the picture's name, then each container opened. */
@@ -180,6 +182,11 @@ export function GraphControls({
           <FindPart levels={levels} onDone={() => setOpen("")} />
         </div>
       )}
+      {levels?.gone && !open && (
+        <p className="bpg-gone" role="status">
+          The level you left is gone, so the nearest one above it is shown.
+        </p>
+      )}
       {levels?.path.length ? (
         <Breadcrumb title={title} levels={levels} />
       ) : (
@@ -204,7 +211,7 @@ export function GraphControls({
       <button aria-label="Zoom in" title="Zoom in" onClick={onZoomIn}>
         {icons.in}
       </button>
-      <button aria-label="Fit the whole diagram" title="Fit" onClick={onFit}>
+      <button aria-label="Fit to the view" title="Fit" onClick={onFit}>
         {icons.fit}
       </button>
       {map && (

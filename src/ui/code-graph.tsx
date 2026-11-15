@@ -14,7 +14,7 @@ import {
 } from "@xyflow/react";
 import { RoutedEdge, RoutePath } from "./routed-edge.tsx";
 import type { ConnectionGroup } from "./connection-groups.ts";
-import { codeViewport } from "./code-viewport.ts";
+import { codeViewport, READABLE } from "./code-viewport.ts";
 import type { LayoutEdge } from "./layered-layout.ts";
 import { edgePresentation } from "./graph-presentation.ts";
 import { GraphLegend } from "./graph-legend.tsx";
@@ -148,10 +148,13 @@ export function CodeGraph({
   relationshipConnections,
   searchable,
   onConnection,
+  levelGone = false,
 }: {
   snapshot: CodeSnapshot;
   selected: string;
   level: string;
+  /** The folder saved to reopen was removed or renamed, so `level` is the nearest one above it. */
+  levelGone?: boolean;
   dependencies: boolean;
   onSelect: (id: string) => void;
   onLevel: (level: string, selected?: string) => void;
@@ -166,6 +169,8 @@ export function CodeGraph({
   const { sizes, report: reportSize } = useGraphMeasurements();
   const container = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  // As on the plan's pictures, the minimap covers part of the map, so it shows when asked for.
+  const [mapShown, setMapShown] = useState(false);
   useEffect(() => {
     const el = container.current;
     if (!el) return;
@@ -179,8 +184,12 @@ export function CodeGraph({
   const direction: "DOWN" | "RIGHT" =
     size.width && size.width < 600 ? "DOWN" : "RIGHT";
   const instance = useRef<ReactFlowInstance | null>(null);
-  const savedViewport = useRef(navigation?.viewport);
-  const fitting = useRef(!navigation?.viewport);
+  // A view left zoomed out past reading (the whole map fitted) reopens by the map's own rule
+  // rather than as a picture too small to read; one left readable is kept.
+  const readableSaved =
+    navigation?.viewport?.zoom >= READABLE ? navigation.viewport : undefined;
+  const savedViewport = useRef(readableSaved);
+  const fitting = useRef(!readableSaved);
   const rememberViewport = () => {
     const viewport = instance.current?.getViewport();
     if (viewport) {
@@ -253,6 +262,7 @@ export function CodeGraph({
   const layoutInput = useMemo(
     () => ({
       direction: relationshipConnections ? direction : undefined,
+      focus: relationshipConnections ? selected : undefined,
       nodes: files.map((f) => ({
         id: f.path,
         x: 0,
@@ -284,6 +294,7 @@ export function CodeGraph({
       connections,
       relationshipConnections,
       direction,
+      selected,
     ],
   );
   const arrangement = useGraphLayout(layoutInput);
@@ -411,7 +422,7 @@ export function CodeGraph({
   const restoreOrFit = () =>
     relationshipConnections && fitting.current
       ? fit()
-      : savedViewport.current
+      : savedViewport.current?.zoom >= READABLE
         ? void instance.current?.setViewport(savedViewport.current)
         : focusSelection();
   const previousFocus = useRef({ selected, level });
@@ -438,6 +449,7 @@ export function CodeGraph({
     path: levelPath(level),
     onLevel: (next: string) => onLevel(next),
     noun: "file",
+    gone: levelGone,
     find: (query: string) => findParts(parts, query),
     onFind: (id: string) => {
       if (relationshipConnections) return select(id);
@@ -554,7 +566,7 @@ export function CodeGraph({
             instance.current = i;
             restoreOrFit();
           }}
-          defaultViewport={navigation?.viewport}
+          defaultViewport={readableSaved}
           onMove={(event, viewport) => {
             if (event) {
               fitting.current = false;
@@ -592,7 +604,7 @@ export function CodeGraph({
               : select(e.source)
           }
         >
-          {!phone && size.height >= 360 && size.width >= 560 && (
+          {!phone && mapShown && (
             <MiniMap
               position="bottom-left"
               style={{ width: 120, height: 76 }}
@@ -616,6 +628,11 @@ export function CodeGraph({
           legend={legend}
           title={codeMapTitle}
           levels={levelControls}
+          map={
+            phone
+              ? undefined
+              : { shown: mapShown, onToggle: () => setMapShown((shown) => !shown) }
+          }
         />
       </div>
     </section>

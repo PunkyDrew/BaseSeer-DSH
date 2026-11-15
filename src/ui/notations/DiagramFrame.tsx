@@ -8,7 +8,7 @@ type Camera = { x: number; y: number; k: number };
 const MIN_ZOOM = 0.1,
   MAX_ZOOM = 2.5,
   PADDING = 24;
-/** Below this the labels cannot be read; a drawing that would fit smaller opens as wide as reads, and Fit still shows it whole. */
+/** Below this the labels cannot be read; a drawing that would fit only smaller opens, and fits, as wide as reads. */
 const READABLE = 0.7;
 
 // The frame of a notation drawing: the drawing is panned by dragging, zoomed
@@ -47,7 +47,7 @@ export function DiagramFrame({
   reveal?: Rect;
   /** A header row of the drawing, from its top edge in drawing coordinates, held at the frame's top when panned past it. */
   pinned?: { top: number; content: React.ReactNode };
-  /** What a drawing too large to read whole keeps in view as it opens from its top left corner. */
+  /** What a drawing too large to read whole opens on, across: its top row. */
   start?: Rect;
   /** What the drawing opens on when it fits readably: the drawing without what stands beside it (notes), which Fit includes. */
   opening?: Rect;
@@ -72,7 +72,8 @@ export function DiagramFrame({
   const placed = useRef(false);
   placed.current = camera !== null;
   const [dragging, setDragging] = useState(false);
-  const [mapShown, setMapShown] = useState(true);
+  // The minimap would cover part of the drawing it maps, so it shows when asked for.
+  const [mapShown, setMapShown] = useState(false);
   const hasMap = outline.length > 0 && !phone;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const moved = useRef(false);
@@ -89,7 +90,7 @@ export function DiagramFrame({
       (height - 2 * PADDING) / target.height,
       1,
     );
-    if (always || whole >= READABLE) {
+    if (whole >= READABLE) {
       setCamera({
         k: whole,
         x: (el.clientWidth - target.width * whole) / 2 - target.x * whole,
@@ -97,8 +98,9 @@ export function DiagramFrame({
       });
       return;
     }
-    // Too large to read whole: as wide as reads, from the drawing's top edge so
-    // its frame heading shows, and the rest is scrolled to, as a page is.
+    // Too large to read whole, Fit included: shrinking it further would only
+    // make it unreadable, so it is shown as wide as reads, from its top edge,
+    // and the rest is scrolled to, as a page is.
     const across = (el.clientWidth - 2 * PADDING) / viewBox.width;
     const k = Math.min(1, Math.max(READABLE, across));
     setCamera({
@@ -107,15 +109,20 @@ export function DiagramFrame({
       y: PADDING - viewBox.y * k,
     });
   };
-  // Centred when the drawing's width fits; otherwise from its left edge, where
-  // its frame heading is, moved only as far as keeps its start in view.
+  // Centred when the drawing's width fits; otherwise on its start (centred,
+  // or from its left end when it is wider than the view), never past the
+  // drawing's own edges, so the view opens on content rather than margin.
   const placeAcross = (width: number, k: number) => {
     if (viewBox.width * k <= width - 2 * PADDING)
       return (width - viewBox.width * k) / 2 - viewBox.x * k;
-    const left = PADDING - viewBox.x * k;
+    const left = PADDING - viewBox.x * k,
+      right = width - PADDING - (viewBox.x + viewBox.width) * k;
     if (!start) return left;
-    const overflow = left + (start.x + start.width) * k - (width - PADDING);
-    return overflow > 0 ? left - overflow : left;
+    const onStart =
+      start.width * k <= width - 2 * PADDING
+        ? width / 2 - (start.x + start.width / 2) * k
+        : PADDING - start.x * k;
+    return Math.min(left, Math.max(right, onStart));
   };
   // The drawing's bounds, by value: a drawing redrawn as it was keeps its camera.
   const bounds = [viewBox.x, viewBox.y, viewBox.width, viewBox.height];

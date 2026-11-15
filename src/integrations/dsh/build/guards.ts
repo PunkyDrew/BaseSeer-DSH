@@ -1,6 +1,7 @@
 import path from "node:path";
 import { PROJECT_COMMAND_TOOL } from "./commands.ts";
 import { PROGRAM_WINDOW_TOOL } from "./window.ts";
+import { PLAN_FOLDER } from "../../../storage/project-folder.ts";
 
 // What a build's lead and subagents may not do, and why. Each guard refuses
 // a call with a reason the session can act on, rather than failing it silently.
@@ -124,17 +125,146 @@ export function hideWithheldTools(agentCtx: any) {
 export const BUILD_ENDED =
   "BaseSeer: the build you worked for has ended, so you have no tools now. End your turn without further work.";
 
+export const PLAN_FOLDER_KEPT = `BaseSeer: ${PLAN_FOLDER} holds the project's plan and its changes since the last commit, which no other copy holds, so a build may not remove, reset or rewrite it, or run a command that could. The plan stays as it is: read it with plan_map, and carry on with your work outside ${PLAN_FOLDER}, naming the files you mean to change.`;
+
+/**
+ * The plan folder named as a path segment, the way a path or a patch names it.
+ * The folder is at the project's root, so a wildcard that could match it there
+ * (`.base*`, `.b*`, `*`) names it too, as does one in any segment that starts
+ * with a dot, which an absolute path to the project ends in.
+ */
+const NAMES_PLAN = new RegExp(`(^|[\\s"'\`=(,\\\\/])${PLAN_FOLDER.replace(".", "\\.")}(?=[\\s"'\`),;\\\\/]|$)`);
+const ROOT_WILDCARDS = /(?:^|[\s"'`=(,])(?:\.[\\/])?([^\s"'`=(,\\/;|&]*[*?][^\s"'`\\/;|&]*)/g;
+const DOT_WILDCARDS = /[\\/](\.[^\s"'`\\/;|&]*[*?][^\s"'`\\/;|&]*)/g;
+
+/** Whether a wildcard path segment would match the plan folder. */
+function matchesPlan(segment: string) {
+  const pattern = segment.replace(/[.+^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*").replaceAll("?", ".");
+  return new RegExp(`^${pattern}$`, "i").test(PLAN_FOLDER);
+}
+
+/** Whether text names the plan folder, by its name or by a wildcard that matches it. */
+function namesPlanFolder(text: string) {
+  if (NAMES_PLAN.test(text)) return true;
+  return [...text.matchAll(ROOT_WILDCARDS), ...text.matchAll(DOT_WILDCARDS)].some(([, segment]) =>
+    matchesPlan(segment),
+  );
+}
+
+/**
+ * The tools that only read what a path names, which may name the plan
+ * folder; any other tool given a path or patch in it (DSH's write and edit,
+ * an MCP server's file tools) would change it.
+ */
+const READS_PATHS = ["read", "read_image", "grep", "glob", "plan_map"];
+
+/** The arguments that hold a path or a patch, as against a message or a file's new content. */
+const PATH_ARGUMENT = /path|file|patch|input|target|dest|source|dir/i;
+
+/**
+ * Words that delete, move or write what they name, in the shells and in a
+ * script run from one (`fs.rmSync`, `shutil.rmtree`, `os.remove`): a command
+ * that has one and names the plan folder could change it. Copying only out
+ * of the folder is reading, so copies are judged by their destination instead.
+ */
+const CHANGES_FILES =
+  /\b(remove-item|rename-item|move-item|set-content|add-content|clear-content|clear-item|out-file|new-item|tee-object|tee|robocopy|rmtree|rename|ren|mv|move|rmdir|rm|rd|del|erase|remove|unlink|truncate|writefile|appendfile|write_text|write_bytes)(sync)?\b/i;
+
+/** A copy and its arguments, up to the end of its command. */
+const COPIES = /\b(copy-item|cp|copy|xcopy|copyfile)(sync)?\b([^;|&\n]*)/gi;
+
+/** Output redirected into the plan folder. */
+const REDIRECTS_INTO_PLAN = new RegExp(`>\\s*["']?[^\\s;|&<>]*${PLAN_FOLDER.replace(".", "\\.")}`);
+
+/**
+ * A delete of everything in the folder it runs in (`rm -rf *`, `Remove-Item
+ * . -Recurse`), which takes the plan folder with it without naming it.
+ */
+const DELETES_EVERYTHING =
+  /\b(remove-item|rmdir|rm|rd|del|erase)\b[^;|&\n]*?\s["']?(\.{1,2}([\\/]\*?)?|\.?\*)["']?(?=\s|$|[;|&])/i;
+
+/** Git subcommands and their arguments, up to the end of each command. */
+const GIT_COMMANDS = /\bgit\s+(?:-[Cc]\s+\S+\s+|-\S+\s+)*([a-z][\w-]*)([^;|&\n]*)/gi;
+
+/** Whether a copy's destination, its `-Destination` or else its last argument, is in the plan folder. */
+function copiesIntoPlan(argumentText: string) {
+  const words = argumentText.trim().split(/\s+/);
+  const flag = words.findIndex((word) => /^-destination$/i.test(word));
+  const destination = flag >= 0 ? words[flag + 1] : words.at(-1);
+  return Boolean(destination && namesPlanFolder(destination));
+}
+
+/**
+ * Whether a Git command discards changes the plan file may hold, or the plan
+ * folder itself, without having to name it: a hard reset, a stash, a clean,
+ * or a checkout or restore of the whole tree or of the folder.
+ */
+function discardsWork(subcommand: string, argumentText: string) {
+  const words = argumentText.trim().split(/\s+/).filter(Boolean).map((word) => word.replace(/["']/g, ""));
+  const wholeTreeOrPlan = words.some((word) =>
+    [".", "./", "*", ":/"].includes(word) || word.includes(PLAN_FOLDER),
+  );
+  switch (subcommand.toLowerCase()) {
+    case "clean":
+      return !words.some((word) => word === "--dry-run" || /^-[a-z]*n[a-z]*$/i.test(word));
+    case "reset":
+      return words.includes("--hard");
+    case "stash":
+      return !["list", "show"].includes(words[0] ?? "");
+    case "checkout":
+      return wholeTreeOrPlan;
+    case "restore": {
+      const stagedOnly =
+        words.some((word) => word === "--staged" || word === "-S") &&
+        !words.some((word) => word === "--worktree" || word === "-W");
+      return !stagedOnly && wholeTreeOrPlan;
+    }
+    default:
+      return false;
+  }
+}
+
+/** Whether a shell command could remove, reset or rewrite the plan folder. */
+function commandChangesPlan(command: string) {
+  if (DELETES_EVERYTHING.test(command)) return true;
+  for (const [, subcommand, argumentText] of command.matchAll(GIT_COMMANDS))
+    if (discardsWork(subcommand, argumentText)) return true;
+  if (!namesPlanFolder(command)) return false;
+  if (CHANGES_FILES.test(command) || REDIRECTS_INTO_PLAN.test(command)) return true;
+  return [...command.matchAll(COPIES)].some(([, , , argumentText]) => copiesIntoPlan(argumentText));
+}
+
+/** Whether a tool other than a shell is given a path or patch in the plan folder. */
+function pathsChangePlan(name: string, args: Record<string, unknown>) {
+  if (READS_PATHS.includes(name)) return false;
+  return Object.entries(args).some(
+    ([key, value]) => PATH_ARGUMENT.test(key) && namesPlanFolder(JSON.stringify(value) ?? ""),
+  );
+}
+
+/** Why a call would remove, reset or rewrite the plan folder, if it would. */
+function touchesPlanFolder(exec: any) {
+  const args = exec?.arguments ?? {};
+  const changes = SHELLS.includes(exec?.name)
+    ? commandChangesPlan(String(args.command ?? ""))
+    : pathsChangePlan(String(exec?.name), args);
+  return changes ? PLAN_FOLDER_KEPT : undefined;
+}
+
 /**
  * Refuses the withheld tools to a build's lead, the sessions it starts and
- * the ones those start in turn, and every tool once their build has ended. A
- * guard on one session's own context does not reach the sessions it starts,
- * so this one is the plugin's, and asks how each session's build stands.
+ * the ones those start in turn, and every tool once their build has ended;
+ * while it runs, a call that would remove or rewrite the plan folder is
+ * refused too. A guard on one session's own context does not reach the
+ * sessions it starts, so this one is the plugin's, and asks how each
+ * session's build stands.
  */
 export function withholdFromBuilds(ctx: any, build: (session: string) => "running" | "ended" | undefined) {
   ctx.tools?.guard?.((exec: any) => {
     const state = exec?.agent && build(exec.agent.id);
     if (state === "ended") return BUILD_ENDED;
-    return state ? WITHHELD_TOOLS[exec?.name] : undefined;
+    if (!state) return undefined;
+    return WITHHELD_TOOLS[exec?.name] ?? touchesPlanFolder(exec);
   });
 }
 

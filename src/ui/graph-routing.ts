@@ -13,7 +13,13 @@ export type LayoutEdge = {
 export type LayoutInput<
   N extends Box = Box,
   E extends LayoutEdge = LayoutEdge,
-> = { nodes: N[]; edges: E[]; direction?: "RIGHT" | "DOWN" };
+> = {
+  nodes: N[];
+  edges: E[];
+  direction?: "RIGHT" | "DOWN";
+  /** A box every edge touches, laid out with its neighbours split by direction. */
+  focus?: string;
+};
 
 // Open-rectangle intersection: touching a border is allowed.
 export function entersBox(a: Point, b: Point, box: Box): boolean {

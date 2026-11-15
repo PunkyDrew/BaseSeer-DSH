@@ -4,9 +4,11 @@ import type { LayoutInput } from "./layered-layout.ts";
 // that fits at a readable size opens whole, centred and as large as the frame
 // allows; a larger one opens at a readable size on its start box.
 const PADDING = 24,
-  READABLE = 0.7,
   START_ZOOM = 0.9,
   WIDTH_FLOOR = 0.6;
+
+/** Below this zoom the file names cannot be read. */
+export const READABLE = 0.7;
 
 type Box = { x: number; y: number; width: number; height: number };
 

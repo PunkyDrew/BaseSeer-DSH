@@ -18,6 +18,7 @@ export function useGraphLayout<N extends Box, E extends LayoutEdge>(
   const key = JSON.stringify([
     topology,
     input.direction,
+    input.focus,
     input.nodes.map((n) => [n.width, n.height]),
     input.edges.map((e) => (e.label ? [e.label.width, e.label.height] : null)),
   ]);

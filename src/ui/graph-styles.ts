@@ -56,6 +56,7 @@ export const graphStyles = `
 .bpg-pop p,.bpg-pop li { font-size:13px; line-height:1.45; margin:0 0 8px; max-width:none; }
 .bpg-pop ul { margin:0; padding-left:18px; }
 .bpg-pop ul li:last-child { margin-bottom:0; }
+.bpg-controls .bpg-gone { position:absolute; left:8px; bottom:calc(100% + 6px); max-width:min(420px,100cqw - 16px); margin:0; padding:8px 12px; border:1px solid var(--hair-2); background:var(--paper); color:var(--ink-2); font-size:13px; line-height:1.45; }
 /* The level shown, as a path back up; the last step is where the drawing is. */
 .bpg-crumbs { flex:1 1 auto; min-width:0; overflow:hidden; }
 .bpg-crumbs ol { display:flex; align-items:center; margin:0; padding:0; list-style:none; min-width:0; }
@@ -85,7 +86,7 @@ ul.bpg-found { list-style:none; margin:8px 0 0; padding:0; }
   .bpg-controls-title { display:none; }
   .bpg-crumbs li:not(:nth-last-child(-n+2)) { display:none; }
 }
-@container canvas (max-width: 520px) { .bpg-minimap,.bpg-map-toggle { display:none!important; } }
+@container canvas (max-width: 520px) { .bpg-minimap,.bpg .react-flow__minimap,.bpg-map-toggle { display:none!important; } }
 
 /* The key of the folded pictures and the Code map: each kind of box and arrow as it is drawn. */
 .bpg-key { position:relative; font-size:12.5px; line-height:1.5; margin:0 0 10px; color:var(--ink); }

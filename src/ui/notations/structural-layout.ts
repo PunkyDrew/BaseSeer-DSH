@@ -47,7 +47,9 @@ export async function structuralLayout(
       : { id, width: node.width, height: node.height };
   };
   // Parts with no arrow at this level have no layer to go in, so layering
-  // would line them all up in one row; they are packed into a block instead.
+  // would line them all up in one row. They are packed into a block as wide
+  // as a screen instead, below the parts the arrows join, so the level reads
+  // from its connected parts down and never runs off to one side.
   const pack = (container: string, inner: string[]): ElkNode[] => {
     const loose = new Set(inner.filter((id) => !joined.has(id) && !children.has(id)));
     if (loose.size < 2) return inner.map(build);
@@ -58,9 +60,10 @@ export async function structuralLayout(
         layoutOptions: {
           "elk.algorithm": "rectpacking",
           "elk.hierarchyHandling": "SEPARATE_CHILDREN",
+          "elk.layered.layering.layerConstraint": "LAST",
           "elk.padding": "[top=0,left=0,bottom=0,right=0]",
           "elk.spacing.nodeNode": "40",
-          "elk.aspectRatio": "1",
+          "elk.aspectRatio": "1.2",
         },
         children: [...loose].map(build),
       },

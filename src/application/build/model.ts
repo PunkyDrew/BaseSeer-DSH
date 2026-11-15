@@ -113,20 +113,6 @@ export type LeadBrief = {
 };
 
 /**
- * The titles of the chats BaseSeer starts among the project's chats, a
- * build's lead and reviewers, a validation and a plan review: the owner can
- * watch them work there, and talks to BaseSeer only in the Planning chat,
- * whose messages every build reads.
- */
-export const BUILD_CHAT_TITLES = {
-  lead: "BaseSeer build (watch only)",
-  reviewer: "BaseSeer review (watch only)",
-  tester: "BaseSeer use test (watch only)",
-  validator: "BaseSeer validation (watch only)",
-  planReviewer: "BaseSeer plan review (watch only)",
-} as const;
-
-/**
  * A session that changes nothing while it reads the project for the owner, a
  * validation of its code or a review of its plan at the go: where, and the
  * Planning chat that gets its report.

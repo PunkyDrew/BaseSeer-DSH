@@ -3,7 +3,7 @@ import { nodeHeight } from "../graph-model.ts";
 import type { GraphSizes } from "../use-graph-measurements.ts";
 import { clip } from "./geometry.ts";
 import { containmentIndex } from "./levels.ts";
-import { partNode } from "./structural.ts";
+import { partNode, sizeKey } from "./structural.ts";
 import type {
   StructuralEdge,
   StructuralNode,
@@ -60,7 +60,7 @@ export function projectDeployment(
       summary: r.data.technology ?? r.data.responsibility ?? "",
       files: [],
       width: boundary ? 0 : base.width + NODE_DEPTH,
-      height: (sizes[r.id]?.height ?? nodeHeight) + NODE_DEPTH,
+      height: (sizes[sizeKey(r.id, boundary)]?.height ?? nodeHeight) + NODE_DEPTH,
     };
   };
   const nodes = [

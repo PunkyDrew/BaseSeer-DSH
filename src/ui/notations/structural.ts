@@ -37,6 +37,14 @@ const typeLine = (symbol: Symbol) =>
     : symbol === "person"
       ? "«actor»"
       : "«component»";
+/**
+ * What a box's card is measured under. An open container's frame shares its
+ * id with the closed box it is one level up, and its card spans the whole
+ * frame, so it is measured apart: going back up draws the closed box at its
+ * own size.
+ */
+export const sizeKey = (id: string, boundary: boolean) => (boundary ? `${id}#frame` : id);
+
 /** A part as a UML component, interface or actor box, drawn inside its displayed container when it has one. */
 export function partNode(
   r: PlanningRecord,
@@ -46,7 +54,8 @@ export function partNode(
   boundary: boolean,
 ): StructuralNode {
   const symbol = symbolOf(r),
-    files = cardFiles(r);
+    files = cardFiles(r),
+    measured = sizes[sizeKey(r.id, boundary)];
   return {
     id: r.id,
     record: r.id,
@@ -63,8 +72,8 @@ export function partNode(
     boundary,
     x: 0,
     y: 0,
-    width: boundary ? 0 : (sizes[r.id]?.width ?? nodeWidth),
-    height: sizes[r.id]?.height ?? nodeHeight + (files.length ? 42 : 0),
+    width: boundary ? 0 : (measured?.width ?? nodeWidth),
+    height: measured?.height ?? nodeHeight + (files.length ? 42 : 0),
     ...(parent ? { details: [{ label: "Inside", text: parent.title }] } : {}),
   };
 }

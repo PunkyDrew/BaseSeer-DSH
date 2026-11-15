@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { PlanError } from "../../domain/plan.ts";
+import { BUILD_CHAT_TITLES } from "../../domain/build-chats.ts";
 import { buildPlan, componentModels, leadRoute, replacements } from "../../domain/build-plan.ts";
 import type { WorkRoute } from "../../domain/work-automation.ts";
 import type { Document } from "../../domain/records.ts";
@@ -36,7 +37,6 @@ import { inspectFindings } from "./code-findings.ts";
 import { AcceptanceGate } from "./gate.ts";
 import * as git from "./git.ts";
 import {
-  BUILD_CHAT_TITLES,
   BUILD_FORMAT,
   REVIEWERS,
   clip,

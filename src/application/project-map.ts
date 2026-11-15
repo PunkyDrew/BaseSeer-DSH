@@ -175,14 +175,18 @@ export class ProjectMap {
         }),
     );
   }
-  async recordSupportAsync(plan: string, document: Document, root: string) {
+  /** Whether the saved map still matches the files, checked without blocking. */
+  async freshness(plan: string, root: string) {
     const saved = this.read(plan);
     const current = await mapSourceCurrentAsync(saved, root);
-    return this.recordSupport(plan, document, root, {
+    return {
       saved,
       current:
         current && JSON.stringify(this.read(plan)) === JSON.stringify(saved),
-    });
+    };
+  }
+  async recordSupportAsync(plan: string, document: Document, root: string) {
+    return this.recordSupport(plan, document, root, await this.freshness(plan, root));
   }
   recordSupport(
     plan: string,

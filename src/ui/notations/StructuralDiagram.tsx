@@ -14,6 +14,7 @@ import { NotationEmpty } from "./NotationEmpty.tsx";
 import { clip, frameTag, pointsBounds } from "./geometry.ts";
 import { structuralLayout, type StructuralLayout } from "./structural-layout.ts";
 import { NODE_DEPTH } from "./deployment.ts";
+import { sizeKey } from "./structural.ts";
 import type { Point, Rect, StructuralNode, StructuralProjection } from "./types.ts";
 import { TextLines, UmlFrame, UmlNodeFaces } from "./uml.tsx";
 
@@ -300,9 +301,11 @@ export function StructuralDiagram({
               )}
               <foreignObject
                 {...face}
-                height={n.boundary ? (sizes[n.id]?.height ?? n.height - d) : face.height}
+                height={
+                  n.boundary ? (sizes[sizeKey(n.id, true)]?.height ?? n.height - d) : face.height
+                }
               >
-                <MeasuredCard id={n.id} report={report}>
+                <MeasuredCard id={sizeKey(n.id, n.boundary)} report={report}>
                   <Card node={n} />
                 </MeasuredCard>
               </foreignObject>

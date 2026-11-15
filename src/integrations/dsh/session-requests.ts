@@ -24,6 +24,7 @@ export function sessionRequests(
     refresher,
   } = services;
   const { actors, sessionWorkspace, sessionMode } = lifecycle;
+  const firstScans = new Set<string>();
   return async (endpoint: string, q: RequestPayload): Promise<unknown> => {
     switch (endpoint) {
       case "provider-pricing":
@@ -123,27 +124,37 @@ export function sessionRequests(
           planning.actor("owner", "owner", ws.id, ws.path);
           records.store.refresh(binding.plan);
         }
-        if (binding && !projectMap.read(binding.plan).latest)
+        // A plan with no code map yet gets one first scan. It starts after this
+        // reply, and only once: the page asks again every second, and a scan
+        // already running would otherwise be queued again on each ask.
+        if (
+          binding &&
+          !projectMap.read(binding.plan).latest &&
+          !firstScans.has(binding.plan)
+        ) {
+          firstScans.add(binding.plan);
           void refresher.request(binding.plan, ws.path, 0);
+        }
         const plan = binding ? records.read(binding.plan) : null;
+        const fresh = binding
+          ? await projectMap.freshness(binding.plan, ws.path)
+          : null;
         return {
           session,
           workspace: { id: ws.id, title: ws.title },
           projectMap: !!binding && projectMap.has(binding.plan),
-          ingestion: binding
-            ? await generation.statusAsync(binding.plan, ws.path)
-            : null,
+          ingestion:
+            binding && fresh
+              ? generation.status(binding.plan, ws.path, fresh.current)
+              : null,
           mode: sessionMode(session, ws.id),
           scenarioSources: plan
             ? projectMap.scenarioSources(plan.id, plan.document)
             : {},
-          recordSupport: plan
-            ? await projectMap.recordSupportAsync(
-                plan.id,
-                plan.document,
-                ws.path,
-              )
-            : {},
+          recordSupport:
+            plan && fresh
+              ? projectMap.recordSupport(plan.id, plan.document, ws.path, fresh)
+              : {},
           mapScope: binding
             ? projectMap.read(binding.plan).latest?.scope
             : undefined,

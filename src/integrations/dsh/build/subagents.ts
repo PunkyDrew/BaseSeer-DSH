@@ -1,6 +1,6 @@
 import { PlanError } from "../../../domain/plan.ts";
+import { BUILD_CHAT_TITLES } from "../../../domain/build-chats.ts";
 import {
-  BUILD_CHAT_TITLES,
   type BuildHost,
   type BuildRun,
   type BuildRuns,

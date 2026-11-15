@@ -73,7 +73,14 @@ export function DiagramFrame({
   placed.current = camera !== null;
   const [dragging, setDragging] = useState(false);
   // The minimap would cover part of the drawing it maps, so it shows when asked for.
-  const [mapShown, setMapShown] = useState(false);
+  const [mapShown, setMapShown] = useState(mapChosen);
+  const toggleMap = () => {
+    mapChosen = !mapShown;
+    setMapShown(mapChosen);
+  };
+  // A frame centres the selection it opens with, and the part a search picks;
+  // any other selection is only brought into view, so moving by keys does not jump.
+  const centring = useRef(true);
   const hasMap = outline.length > 0 && !phone;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const moved = useRef(false);
@@ -141,7 +148,10 @@ export function DiagramFrame({
     // same commit (a level just opened) is the one it moves.
     const el = frame.current,
       target = selected ?? reveal;
-    if (!target || !el || !camera) return;
+    if (!el || !camera) return;
+    const centre = centring.current && target === selected;
+    centring.current = false;
+    if (!target) return;
     setCamera((c) => {
       if (!c) return c;
       const width = el.clientWidth,
@@ -150,7 +160,8 @@ export function DiagramFrame({
         top = target.y * c.k + c.y,
         right = left + target.width * c.k,
         bottom = top + target.height * c.k;
-      if (left >= 0 && top >= 0 && right <= width && bottom <= height) return c;
+      const inView = left >= 0 && top >= 0 && right <= width && bottom <= height;
+      if (inView && !centre) return c;
       return {
         k: c.k,
         x: width / 2 - (target.x + target.width / 2) * c.k,
@@ -339,18 +350,27 @@ export function DiagramFrame({
         legend={legend}
         notes={notes}
         title={title}
-        levels={levels}
-        map={
-          hasMap
-            ? { shown: mapShown, onToggle: () => setMapShown((shown) => !shown) }
-            : undefined
+        levels={
+          levels && {
+            ...levels,
+            onFind: (id) => {
+              centring.current = true;
+              levels.onFind(id);
+            },
+          }
         }
+        map={hasMap ? { shown: mapShown, onToggle: toggleMap } : undefined}
       />
     </div>
   );
 }
 
 const MAP = { width: 144, height: 96 };
+/**
+ * Whether the owner last asked for the minimap: each level and notation is a
+ * frame of its own, and the map stays as they left it on every one.
+ */
+let mapChosen = false;
 
 /**
  * The whole drawing small, in the frame's corner above the bar, with the part
@@ -370,14 +390,12 @@ function Minimap({
   onCentre: (x: number, y: number) => void;
 }) {
   const map = minimapView(drawing, camera, view, MAP);
-  // With the whole drawing in view there is nowhere to go, and the map would
-  // only cover a corner of it.
-  if (map.shown.width >= map.width - 1 && map.shown.height >= map.height - 1) return null;
+  const { picture } = map;
   const centre = (event: React.PointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     onCentre(
-      drawing.x + (event.clientX - box.left) / map.scale,
-      drawing.y + (event.clientY - box.top) / map.scale,
+      drawing.x + (event.clientX - box.left - picture.x) / map.scale,
+      drawing.y + (event.clientY - box.top - picture.y) / map.scale,
     );
   };
   return (
@@ -385,8 +403,8 @@ function Minimap({
       className="bpg-minimap"
       role="img"
       aria-label="Minimap of the whole diagram"
-      width={map.width}
-      height={map.height}
+      width={MAP.width}
+      height={MAP.height}
       onPointerDown={(event) => {
         // The frame would take this as the start of a drag of the drawing.
         event.stopPropagation();
@@ -400,8 +418,8 @@ function Minimap({
       {outline.map((box, index) => (
         <rect
           key={index}
-          x={(box.x - drawing.x) * map.scale}
-          y={(box.y - drawing.y) * map.scale}
+          x={picture.x + (box.x - drawing.x) * map.scale}
+          y={picture.y + (box.y - drawing.y) * map.scale}
           width={box.width * map.scale}
           height={box.height * map.scale}
         />

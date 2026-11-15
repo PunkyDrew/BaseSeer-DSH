@@ -5,10 +5,7 @@ import { PlanError } from "../domain/plan.ts";
 import { Records } from "./records.ts";
 import { ProjectMap } from "./project-map.ts";
 import { scanScope } from "../analysis/project-scan.ts";
-import {
-  mapSourceCurrent,
-  mapSourceCurrentAsync,
-} from "./statement-support.ts";
+import { mapSourceCurrent } from "./statement-support.ts";
 import {
   assessGeneration,
   assessmentMatches,
@@ -73,15 +70,6 @@ export class CodebaseGeneration {
       }
     }
     return run;
-  }
-  async statusAsync(plan: string, root: string) {
-    const saved = this.map.read(plan);
-    const current = await mapSourceCurrentAsync(saved, root);
-    return this.status(
-      plan,
-      root,
-      current && JSON.stringify(this.map.read(plan)) === JSON.stringify(saved),
-    );
   }
   status(plan: string, root?: string, checked?: boolean) {
     const run = this.latest(plan);

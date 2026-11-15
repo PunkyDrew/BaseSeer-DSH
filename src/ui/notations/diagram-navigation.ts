@@ -74,8 +74,9 @@ export function escapeStep(focused: boolean, level: string): "clear" | "up" | nu
 }
 
 /**
- * The minimap's drawing: the whole picture scaled into the map, and the part
- * of it the frame shows, clipped to the picture, in the map's coordinates.
+ * The minimap's drawing: the whole picture scaled and centred into the map,
+ * which keeps one size whatever the picture's shape, and the part of the
+ * picture the frame shows, clipped to it, in the map's coordinates.
  */
 export function minimapView(
   drawing: Rect,
@@ -84,17 +85,22 @@ export function minimapView(
   map: { width: number; height: number },
 ) {
   const scale = Math.min(map.width / drawing.width, map.height / drawing.height);
+  const picture = {
+    x: (map.width - drawing.width * scale) / 2,
+    y: (map.height - drawing.height * scale) / 2,
+    width: drawing.width * scale,
+    height: drawing.height * scale,
+  };
   const left = Math.max(drawing.x, -camera.x / camera.k),
     top = Math.max(drawing.y, -camera.y / camera.k),
     right = Math.min(drawing.x + drawing.width, (view.width - camera.x) / camera.k),
     bottom = Math.min(drawing.y + drawing.height, (view.height - camera.y) / camera.k);
   return {
     scale,
-    width: drawing.width * scale,
-    height: drawing.height * scale,
+    picture,
     shown: {
-      x: (left - drawing.x) * scale,
-      y: (top - drawing.y) * scale,
+      x: picture.x + (left - drawing.x) * scale,
+      y: picture.y + (top - drawing.y) * scale,
       width: Math.max(0, right - left) * scale,
       height: Math.max(0, bottom - top) * scale,
     },

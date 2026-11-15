@@ -220,12 +220,30 @@ export function CodeGraph({
       container.current.clientHeight,
       {
         always: whole,
-        start: relationshipConnections
-          ? arrangement.layout.nodes.find((node) => node.id === focus)
-          : undefined,
+        start: arrangement.layout.nodes.find((node) => node.id === focus),
       },
     );
     return viewport && instance.current?.setViewport(viewport);
+  };
+  // Choosing a box never re-zooms: boxes keep their size and stay under the pointer, so a
+  // double-click reaches the box it started on. Only a box found by search that the view does
+  // not show at all is brought in, at the zoom it is at.
+  const reveal = (id: string) => {
+    const node = arrangement.layout.nodes.find((n) => n.id === id);
+    const view = instance.current?.getViewport();
+    const frame = container.current;
+    if (!node || !view || !frame) return;
+    const left = node.x * view.zoom + view.x;
+    const top = node.y * view.zoom + view.y;
+    const shown =
+      left < frame.clientWidth &&
+      top < frame.clientHeight &&
+      left + node.width * view.zoom > 0 &&
+      top + node.height * view.zoom > 0;
+    if (!shown)
+      void instance.current?.setCenter(node.x + node.width / 2, node.y + node.height / 2, {
+        zoom: view.zoom,
+      });
   };
   // The connected view shows a file's neighbours from every folder, so it has no levels.
   const projection = useMemo(
@@ -259,10 +277,14 @@ export function CodeGraph({
         })),
     );
   }, [snapshot.digest, level, relationshipConnections]);
+  // Only a connections map is arranged around its focus and direction; choosing a box or
+  // resizing the frame on any other map must not lay it out again, which would re-frame it.
+  const layoutDirection = relationshipConnections ? direction : undefined;
+  const layoutFocus = relationshipConnections ? selected : undefined;
   const layoutInput = useMemo(
     () => ({
-      direction: relationshipConnections ? direction : undefined,
-      focus: relationshipConnections ? selected : undefined,
+      direction: layoutDirection,
+      focus: layoutFocus,
       nodes: files.map((f) => ({
         id: f.path,
         x: 0,
@@ -293,8 +315,8 @@ export function CodeGraph({
       sizes,
       connections,
       relationshipConnections,
-      direction,
-      selected,
+      layoutDirection,
+      layoutFocus,
     ],
   );
   const arrangement = useGraphLayout(layoutInput);
@@ -408,43 +430,32 @@ export function CodeGraph({
       onConnection?.(relationshipConnections.find((c) => c.id === edge.id)!);
     else if (file || edge) select(file?.path ?? edge!.source);
   });
-  const focusSelection = () => {
-    fitting.current = false;
-    return focus && !relationshipConnections
-      ? instance.current?.fitView({
-          nodes: [{ id: focus }],
-          padding: 0.25,
-          minZoom: 0.9,
-          maxZoom: 1,
-        })
-      : fit();
-  };
   const restoreOrFit = () =>
-    relationshipConnections && fitting.current
+    (relationshipConnections && fitting.current) || !(savedViewport.current?.zoom >= READABLE)
       ? fit()
-      : savedViewport.current?.zoom >= READABLE
-        ? void instance.current?.setViewport(savedViewport.current)
-        : focusSelection();
-  const previousFocus = useRef({ selected, level });
-  // A new level or choice is framed once its boxes are laid out, and again whenever they are
-  // re-laid out with their measured sizes, until the reader moves the view themselves.
+      : void instance.current?.setViewport(savedViewport.current);
+  // The connections map is arranged around its focus, so a new focus is framed like a new level.
+  const frameKey = relationshipConnections ? `${level}\n${selected}` : level;
+  const previousFrameKey = useRef(frameKey);
+  // A new level is framed once its boxes are laid out, and again whenever they are re-laid out
+  // with their measured sizes, until the reader moves the view themselves.
   const refocus = useRef(false);
   useEffect(() => {
-    const moved =
-      (!phone && previousFocus.current.selected !== selected) ||
-      previousFocus.current.level !== level;
-    previousFocus.current = { selected, level };
-    if (moved) {
+    if (previousFrameKey.current !== frameKey) {
+      previousFrameKey.current = frameKey;
       savedViewport.current = undefined;
       refocus.current = true;
     }
     if (!arrangement.ready) return;
     const frame = requestAnimationFrame(() => {
-      if (refocus.current) void navigate(focusSelection);
+      if (refocus.current) void navigate(() => fit());
       else restoreOrFit();
     });
     return () => cancelAnimationFrame(frame);
-  }, [snapshot.digest, level, selected, phone, arrangement.layout, arrangement.ready]);
+  }, [snapshot.digest, frameKey, phone, arrangement.layout, arrangement.ready]);
+  useEffect(() => {
+    if (!phone && focus && !relationshipConnections) reveal(focus);
+  }, [focus]);
   const levelControls = {
     path: levelPath(level),
     onLevel: (next: string) => onLevel(next),

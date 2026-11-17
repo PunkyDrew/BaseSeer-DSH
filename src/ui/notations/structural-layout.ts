@@ -47,10 +47,11 @@ export async function structuralLayout(
       : { id, width: node.width, height: node.height };
   };
   // Parts with no arrow at this level have no layer to go in, so layering
-  // would line them all up in one row. They are packed into a block in a
-  // layer of its own below the parts the arrows join, wider than tall as a
-  // screen is, so the level reads from its connected parts down and a level
-  // of many loose parts fits a screen whole at a readable size.
+  // would line them all up in one row. They are packed into a block in the
+  // last layer, wider than tall as a screen is, so the level reads from its
+  // connected parts down and a level of many loose parts fits a screen whole
+  // at a readable size. Not LAST_SEPARATE: elkjs throws a ClassCastException
+  // for it in a container whose parts have arrows both within it and out of it.
   const pack = (container: string, inner: string[]): ElkNode[] => {
     const loose = new Set(inner.filter((id) => !joined.has(id) && !children.has(id)));
     if (loose.size < 2) return inner.map(build);
@@ -61,7 +62,7 @@ export async function structuralLayout(
         layoutOptions: {
           "elk.algorithm": "rectpacking",
           "elk.hierarchyHandling": "SEPARATE_CHILDREN",
-          "elk.layered.layering.layerConstraint": "LAST_SEPARATE",
+          "elk.layered.layering.layerConstraint": "LAST",
           "elk.padding": "[top=0,left=0,bottom=0,right=0]",
           "elk.spacing.nodeNode": "40",
           "elk.aspectRatio": "2.4",

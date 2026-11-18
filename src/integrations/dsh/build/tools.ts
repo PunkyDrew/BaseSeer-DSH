@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { defineTool } from "@deepseek-ai/dsh-tools";
-import { PlanError, text } from "../../../domain/plan.ts";
+import { PlanError, text, type OwnerMessage } from "../../../domain/plan.ts";
 import type { BuildCommands, PlanMap } from "../../../application/build/index.ts";
+import { pageValue } from "../paging.ts";
 import { toolJson } from "../tool-json.ts";
 import {
   PROJECT_COMMAND_TOOL,
@@ -261,10 +262,12 @@ export function programWindowTool(agent: any, folder: string) {
  * exactly and its planned components against the files in the project
  * folder.
  */
-export function planMapTool(agent: any, map: PlanMap) {
+export function planMapTool(agent: any, map: PlanMap, exchange?: (number: number) => OwnerMessage | undefined) {
   return defineTool({
     name: "plan_map",
-    description: `Read the project's plan from BaseSeer's map, read-only. command.action: "records" lists every record and link; with ids:[...], it returns those records exactly, with the links that touch them. "coverage" compares each planned component with the files in this folder: built, partial or missing, the files no component plans, and where it could not read the folder whole.`,
+    description:
+      `Read the project's plan from BaseSeer's map, read-only. command.action: "records" lists every record and link; with ids:[...], it returns those records exactly, with the links that touch them. "coverage" compares each planned component with the files in this folder: built, partial or missing, the files no component plans, and where it could not read the folder whole.` +
+      (exchange ? ' "exchange" with number reads that numbered owner message and the planner text it answers, unmodified. For a paged exchange pass nextOffset as offset with the same number.' : ""),
     parameters: {
       command: {
         type: "object",
@@ -282,7 +285,16 @@ export function planMapTool(agent: any, map: PlanMap) {
         return toolJson(map.records(ids), "plan_map");
       }
       if (action === "coverage") return toolJson(await map.coverage(), "plan_map");
-      throw new PlanError("INVALID", 'Use action "records" or "coverage"');
+      if (action === "exchange") {
+        if (!exchange) throw new PlanError("DENIED", "Only the build's lead can look up an exchange.");
+        const { number, offset } = args.command;
+        if (!Number.isSafeInteger(number) || number < 1)
+          throw new PlanError("INVALID", "Use a positive whole exchange number from the lead's instructions.");
+        const message = exchange(number);
+        if (!message) throw new PlanError("INVALID", `No saved exchange has number ${number}.`);
+        return pageValue(message, offset);
+      }
+      throw new PlanError("INVALID", `Use action ${exchange ? '"records", "coverage" or "exchange"' : '"records" or "coverage"'}`);
     },
   });
 }

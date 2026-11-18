@@ -240,7 +240,7 @@ export type BuildRun = {
   reviewer: string;
   /** The session that uses the program as its owner would once the build's check passes, in a copy of the project. */
   tester: string;
-  /** The review, from the first of its reviewers to report. */
+  /** The review as its reports come in; each finding's heading names the revision its session read. */
   review?: BuildReview;
   /** How many checks a reviewer could not run in or left no report for; the build stops rather than complete without both reports. */
   reviewFailures?: number;

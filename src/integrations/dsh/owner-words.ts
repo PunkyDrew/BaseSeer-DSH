@@ -41,17 +41,14 @@ type MessageEvent = {
   };
 };
 
-type Question = { id?: string; question?: string; options?: { label?: string }[] };
+type Question = { id?: string; question?: string; options?: { label?: string; description?: string }[] };
 type Answer = { id?: string; selected?: string[]; custom?: string };
 
 /** DSH's question form, whose answers reach the chat as the tool's result, not as a message. */
 const QUESTION_TOOL = "ask_user_question";
 
 const textOf = (content: Content | undefined) =>
-  (content ?? [])
-    .flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
-    .join("\n\n")
-    .trim();
+  (content ?? []).flatMap((part) => (part.type === "text" && part.text ? [part.text] : [])).join("\n\n");
 
 const timeOf = (e: MessageEvent) =>
   new Date(typeof e.time === "number" ? e.time : Date.now()).toISOString();
@@ -79,7 +76,9 @@ function answersOf(e: MessageEvent): Answer[] {
 }
 
 const questionText = (question: Question, n: number) => {
-  const options = (question.options ?? []).flatMap((option) => (option.label ? [option.label] : []));
+  const options = (question.options ?? []).flatMap(({ label, description }) =>
+    label ? [description ? `${label}: ${description}` : label] : [],
+  );
   return `${n}. ${question.question ?? ""}${options.length ? ` (${options.join(" / ")})` : ""}`;
 };
 

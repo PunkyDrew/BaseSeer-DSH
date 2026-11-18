@@ -8,8 +8,9 @@ import { ownerSection } from "./owner.ts";
 // share nothing with the build judge it for its owner, as blind reviewers do:
 // the reviewer reads the owner's words against the code, and the tester uses
 // the program as its owner would, in a copy of the project, since a defect
-// that shows only in use passes a reading of the code. Neither changes the
-// project: the lead acts on their reports.
+// that shows only in use passes a reading of the code. Both read the same
+// checked revision at the same time, and neither changes the project: the
+// lead acts on their reports.
 
 /** The whole report of a review that found nothing. */
 export const NOTHING_FOUND = "Nothing found.";
@@ -17,13 +18,22 @@ export const NOTHING_FOUND = "Nothing found.";
 /** Whether a review's report holds anything for the lead or the owner. */
 export const found = (report: string) => !!report && !/^nothing found\.?$/i.test(report.trim());
 
+/** How the use test's report starts when something stops the owner's job from going on. */
+const BLOCKED = "BLOCKED:";
+
+/**
+ * Whether a use test's report is a blocker: the lead repairs it at once, and
+ * the use test goes on with the repair rather than wait for the code review.
+ */
+export const blocked = (report: string) => /^\s*(?:1\.\s*)?BLOCKED:/.test(report);
+
 /** The reviewer's system prompt: the owner's words and how to judge the code, and nothing of the build. */
-export function reviewInstructions(owner: OwnerMessage[], project: string, commands: BuildCommands) {
+export function reviewInstructions(owner: OwnerMessage[], project: string, commands: BuildCommands, copy: string) {
   const recorded = Object.entries(commands)
     .map(([name, command]) => `${name}: ${command}`)
     .join("; ");
   return [
-    `You review "${project}" for its owner, in the project folder: the current folder. You did not build it and share nothing with the sessions that did, so judge the code by what the owner asked for, not by how it was meant to work.`,
+    `You review "${project}" for its owner, in your checked copy: ${copy}. Read the files there and pass that absolute path as your shell workdir. You did not build it and share nothing with the sessions that did, so judge the code by what the owner asked for, not by how it was meant to work.`,
     ownerSection(owner),
     `The project's recorded commands, which project_command runs: ${recorded || "none"}. They have just passed in a clean copy, so do not run its tests again. Read what the build changed, and run the program only to confirm what you read: another session uses it the way its owner will. You change nothing in the project and start no other session: the tools that edit files or start sessions are withheld from you.`,
   ].join("\n\n");
@@ -62,7 +72,7 @@ export function useInstructions(owner: OwnerMessage[], project: string, doc: Doc
     planned
       ? `What the owner will do with it, as the plan lists each operation they described; where the plan and the owner's words differ, their words win:\n${planned}`
       : "",
-    `Your copy of the project is ${copy}: the program keeps its data there, and nothing you do there reaches the project. Run every command there, giving it as workdir; the current folder, where this chat sits, is the project itself, which you leave as it is. You change no file of the program and start no other session: the tools that edit files or start sessions are withheld from you.`,
+    `Your copy of the project is ${copy}: the program keeps its data there, and nothing you do there reaches the project. Read the files there and pass that absolute path as your shell workdir. You change no file of the program and start no other session: the tools that edit files or start sessions are withheld from you.`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -78,13 +88,14 @@ export const useTask = `Use the program as its owner will, from the start:
 - Start it the way its README tells its owner to, step by step from your copy, typing each step in your shell as they will: project_command puts tools first on PATH that the owner may not have. A step that is missing or does not work is an item.
 - Do each thing the owner will do with it, end to end, through the program itself as they will (its pages, its windows, its commands). Give it yourself what the owner will give it (their records, files, input), as they will, as much of each as their words describe, never fixtures or seed scripts.
 - Read the program's own tests for a refusal they assert as correct: something the owner needs to do with it that the program rejects or limits. Where the owner never asked for that refusal, try it in the program, and report it with the test.
+- When something stops the owner's job from going on (the program does not start, or a step they need fails so nothing after it can be tried), stop there and report at once, so the lead repairs it while the code is still being read: your report's item 1 starts with ${BLOCKED} and says what stops it, and any other item you found follows. If you reported a blocker earlier in this chat, your copy now holds its repair: go on from where it stopped.
 - Stop every program you started before you report.
 Report, in the owner's terms, each thing the owner would find wrong, numbered 1, 2, 3 and so on through the whole report: what the owner does, what happens, and the file:line of its cause where you can find it. Report only what you saw happen in the program, not what might, and nothing that works as the owner needs. Your last message is the report alone; if you found nothing, it is exactly: ${NOTHING_FOUND}`;
 
 /** What heads each reviewer's items in the review's report. */
 const HEADINGS: Record<Reviewer, string> = {
-  reviewer: "From reading the code against the owner's words:",
-  tester: "From using the program as its owner would:",
+  reviewer: "From reading the code against the owner's words",
+  tester: "From using the program as its owner would",
 };
 
 /**
@@ -93,13 +104,13 @@ const HEADINGS: Record<Reviewer, string> = {
  * there, since the lead names each item by its number. Also returns the
  * items added, which the lead has yet to see.
  */
-export function joinReports(review: string, reports: { reviewer: Reviewer; report: string }[]) {
+export function joinReports(review: string, reports: { reviewer: Reviewer; of: string; report: string }[]) {
   let count = found(review) ? reviewItems(review).length : 0;
   const added = reports
     .filter((r) => found(r.report))
-    .map(({ reviewer, report }) => {
+    .map(({ reviewer, of, report }) => {
       const items = reviewItems(report).map((item) => `${++count}. ${item.trim().replace(/^\d+\.\s*/, "")}`);
-      return [HEADINGS[reviewer], ...items].join("\n\n");
+      return [`${HEADINGS[reviewer]} (${of}):`, ...items].join("\n\n");
     });
   return {
     report: [...(found(review) ? [review] : []), ...added].join("\n\n") || NOTHING_FOUND,

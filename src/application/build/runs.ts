@@ -16,6 +16,7 @@ import {
   type DeliveredBuild,
 } from "./as-built.ts";
 import {
+  blocked,
   found,
   joinReports,
   leadInstructions,
@@ -178,14 +179,17 @@ function failedText(failures: AcceptanceFailure[], checks: { failures: Acceptanc
 }
 
 const REVIEWED =
-  "The acceptance check passed, and BaseSeer's review reported: its reviewer reads the owner's words against the build's changes, and its use test uses the program as its owner will, in a copy of the project; the items below are from the session that reported first, and the other's join at your next check, numbered on. The review stands for the owner, so fix every item of its report, wherever the program does the same thing, yourself or with a subagent, including the items you would have left alone; where you think an item was wrong, fix it all the same and say which and why in your report to the planner, which the owner reads. An item asking for what the program already does needs no change: confirm it in the program. Then check again, naming the items you fixed: fixed:[<its number>, ...]. The next passing check completes the build once every item is fixed.";
+  "The acceptance check passed, and BaseSeer's review reported: its reviewer reads the owner's words against the build's changes, and its use test uses the program as its owner will, each in a copy of the revision named in its report. The review stands for the owner, so fix every item of its report, wherever the program does the same thing, yourself or with a subagent, including the items you would have left alone; where you think an item was wrong, fix it all the same and say which and why in your report to the planner, which the owner reads. An item asking for what the program already does needs no change: confirm it in the program. Then check again, naming the items you fixed: fixed:[<its number>, ...]. The next passing check completes the build once every item is fixed.";
+
+const BLOCKED_TEXT =
+  "The use test is blocked: repair what its item names first, so the use test goes on with your repair at your next check while the code review finishes reading the revision that passed; its items join at that check, numbered on.";
 
 /** The lead has not yet named every item of the review fixed. */
 const unsettledText = (items: number[]) =>
   `The acceptance check passed, but review item(s) ${items.join(", ")} are not fixed yet. Fix them and check again naming them; the build completes once every item is fixed.`;
 
 /** One review session's report, or why it has none. */
-type ReviewResult = { reviewer: Reviewer; report?: string; failure?: string };
+type ReviewResult = { reviewer: Reviewer; of: string; report?: string; failure?: string };
 
 /** What the lead learns from one run of the check. */
 export type CheckResult =
@@ -652,48 +656,57 @@ export class BuildRuns {
 
   /**
    * The defect review, once the build's check first passes: the reviewers
-   * that have not reported yet, started together. The first report's items
-   * go to the lead as soon as it lands, so the lead fixes while the slower
-   * session still works; the other's join at the check after, numbered on.
-   * Returns the items added, with the check's places to look, or a reviewer
-   * that could not run, for the lead to act on; nothing when the build is to
-   * complete.
+   * that have not reported yet, started together on the revision that
+   * passed, and their reports given to the lead as one list once both are
+   * in. A use test that is blocked is the exception: its report goes to the
+   * lead at once, and the use test goes on with the repair at the next check,
+   * while the code review finishes on the revision it read and its items join
+   * then, numbered on. Returns the items added, with the check's places to
+   * look, or a reviewer that could not run, for the lead to act on; nothing
+   * when the build is to complete.
    */
   private async review(id: string, of: string, doc: Document, places: string[]): Promise<CheckResult | undefined> {
     const b = this.store.get(id);
     const owed = REVIEWERS.filter((reviewer) => !b.review?.from.includes(reviewer));
     if (!this.host?.review || !owed.length) return undefined;
     const settled = new Map<Reviewer, ReviewResult>();
+    let reportBlocker = () => {};
+    const blocker = new Promise<void>((resolve) => {
+      reportBlocker = resolve;
+    });
     const pending = owed.map((reviewer) => {
       const key = `${id}:${reviewer}`;
       const running = this.reviewing.get(key) ?? this.reviewBy(b, reviewer, of, doc);
       this.reviewing.set(key, running);
-      return running.then((result) => settled.set(reviewer, result));
+      return running.then((result) => {
+        settled.set(reviewer, result);
+        if (reviewer === "tester" && result.report && blocked(result.report)) reportBlocker();
+      });
     });
-    await Promise.race(pending);
-    // A report that lands in the same moment as the first joins it now rather than at the next check.
+    await Promise.race([Promise.all(pending), blocker]);
+    // A report that lands in the same moment as the blocker joins it now rather than at the next check.
     await Promise.all(pending.map((p) => Promise.race([p, new Promise((r) => setTimeout(r, 0))])));
-    // A clean first report gives the lead nothing to act on and cannot stand in for the other report.
-    if (![...settled.values()].some((result) => result.failure || (result.report && found(result.report))))
-      await Promise.all(pending);
     // A report taken here is the lead's; one still to come stays at work for the next check.
     for (const reviewer of settled.keys()) this.reviewing.delete(`${id}:${reviewer}`);
     const results = [...settled.values()];
     const after = this.store.get(id);
     if (after.status !== "running") return { stopped: true };
-    const reports = results.flatMap((r) => (r.report ? [{ reviewer: r.reviewer, report: r.report }] : []));
+    const reports = results.flatMap(({ reviewer, of, report }) => report ? [{ reviewer, of, report }] : []);
     const joined = joinReports(after.review?.report ?? "", reports);
+    // A blocked use test has not used the whole program yet, so it is still owed.
+    const isBlocked = reports.some((r) => r.reviewer === "tester" && blocked(r.report));
+    const finished = reports.filter((r) => !(r.reviewer === "tester" && isBlocked));
     if (reports.length)
       after.review = {
         ...after.review,
         at: now(),
         of,
         report: joined.report,
-        from: [...(after.review?.from ?? []), ...reports.map((r) => r.reviewer)],
+        from: [...(after.review?.from ?? []), ...finished.map((r) => r.reviewer)],
         places: found(joined.report) ? reviewPlaces(joined.report, doc) : [],
       };
-    for (const { reviewer, report } of reports)
-      this.store.note(after, found(report) ? `The ${REVIEW_NAMES[reviewer]} reported: ${clip(report, 600)}` : `The ${REVIEW_NAMES[reviewer]} found nothing.`);
+    for (const { reviewer, of: revision, report } of reports)
+      this.store.note(after, `The ${REVIEW_NAMES[reviewer]} ${found(report) ? `reported on ${revision}: ${clip(report, 600)}` : `found nothing on ${revision}.`}`);
     // A reviewer that could not run or left no report is not a clean one: the
     // next check tries it again, and a build without its report stops rather than complete.
     const why = results.flatMap((r) => (r.failure ? [r.failure] : [])).join(" ");
@@ -715,46 +728,28 @@ export class BuildRuns {
         passed: false,
         review: joined.added,
         ...(places.length ? { placesToLook: places } : {}),
-        instruction: [REVIEWED, again].filter(Boolean).join(" "),
+        instruction: [REVIEWED, isBlocked ? BLOCKED_TEXT : "", again].filter(Boolean).join(" "),
       };
     return why ? { passed: false, failures: [{ check: "review", summary: why }], instruction: again } : undefined;
   }
 
-  /** One reviewer's report, or why it has none. The tester works in a copy of the project as the check passed it. */
+  /** One reviewer's report on its assigned revision, even if the next check takes the report. */
   private async reviewBy(b: BuildRun, reviewer: Reviewer, of: string, doc: Document): Promise<ReviewResult> {
     const owner = this.records.store.ownerMessages.read(b.plan);
     const name = REVIEW_NAMES[reviewer];
     try {
-      const folder = reviewer === "reviewer" ? b.root : this.useCopy(b, of);
+      // Refresh only when assigning a turn, never when collecting its pending report.
+      const folder = path.join(this.directory, `${b.plan.slice(0, 8)}-${reviewer === "tester" ? "use" : "read"}`);
+      git.checkout(b.root, folder, of);
       const brief =
         reviewer === "reviewer"
-          ? { folder, instructions: reviewInstructions(owner, b.project, b.commands ?? {}), task: reviewTask(b.base, of) }
+          ? { folder, instructions: reviewInstructions(owner, b.project, b.commands ?? {}, folder), task: reviewTask(b.base, of) }
           : { folder, instructions: useInstructions(owner, b.project, doc, folder), task: useTask };
       const report = (await this.host!.review!(b, reviewer, brief)).trim();
-      return report ? { reviewer, report } : { reviewer, failure: `The ${name} left no report.` };
+      return report ? { reviewer, of, report } : { reviewer, of, failure: `The ${name} left no report.` };
     } catch (error) {
-      return { reviewer, failure: `The ${name} could not run: ${(error as Error).message}` };
+      return { reviewer, of, failure: `The ${name} could not run: ${(error as Error).message}` };
     }
-  }
-
-  /**
-   * The tester's copy of the project, beside the check's own copy: the program
-   * it starts keeps its data there, and the project folder stays as the build
-   * left it. Each use test starts from a fresh copy, as an owner starts from
-   * the delivered project; the copy before goes when the next is made, or
-   * stays where a program the tester left running still holds its files.
-   */
-  private useCopy(b: BuildRun, of: string) {
-    const prefix = `${b.plan.slice(0, 8)}-use-`;
-    for (const earlier of fs.readdirSync(this.directory).filter((name) => name.startsWith(prefix)))
-      try {
-        fs.rmSync(path.join(this.directory, earlier), { recursive: true, force: true });
-      } catch {
-        /* Held open; the next use test tries again. */
-      }
-    const folder = path.join(this.directory, prefix + Date.now().toString(36));
-    git.checkout(b.root, folder, of);
-    return folder;
   }
 
   /** Keeps the review's items the lead names fixed, by their numbers. */
@@ -864,22 +859,28 @@ export class BuildRuns {
     this.store.save(b);
   }
 
+  /** Persist the stop before cancelling sessions: their own turn/end events may arrive during cleanup. */
+  private async stopRun(b: BuildRun, reason: string) {
+    if (b.status !== "running") return;
+    this.halt(b, reason);
+    this.gate.stop(b.id);
+    await this.host?.ended?.(b);
+  }
+
   /** The owner stops the build: its check, its lead and their subagents stop, and their work stays in the project folder. */
   async stop(actor: Actor, id: string) {
-    const b = this.owned(actor, id);
-    if (b.status !== "running") return this.public(b);
-    this.halt(b, "Stopped by the owner. The work so far stays in the project folder.");
-    this.gate.stop(id);
-    await this.host?.ended?.(b);
+    await this.stopRun(this.owned(actor, id), "Stopped by the owner. The work so far stays in the project folder.");
     return this.public(this.get(id));
+  }
+
+  /** An interrupted lead cannot resume this build by receiving a planner answer. */
+  leadInterrupted(id: string) {
+    return this.stopRun(this.get(id), "The lead was interrupted. The work so far stays in the project folder.");
   }
 
   /** The lead could not start, so the build ends before any of it is built. */
   failed(id: string, reason: string) {
-    const b = this.get(id);
-    if (b.status !== "running") return;
-    this.halt(b, reason);
-    void this.host?.ended?.(b);
+    return this.stopRun(this.get(id), reason);
   }
 
   /**

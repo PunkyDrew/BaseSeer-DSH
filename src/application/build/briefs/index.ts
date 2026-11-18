@@ -5,5 +5,5 @@
 export { leadInstructions, leadTask, plannerLeadStopped, plannerReport, subagentInstructions } from "./build.ts";
 export { placesToLook } from "./findings.ts";
 export { plannerPlanReview, plannerPlanReviewFailed, planReviewInstructions, planReviewTask } from "./plan-review.ts";
-export { found, joinReports, reviewInstructions, reviewTask, useInstructions, useTask } from "./review.ts";
+export { blocked, found, joinReports, reviewInstructions, reviewTask, useInstructions, useTask } from "./review.ts";
 export { plannerValidation, validationInstructions, validationTask } from "./validation.ts";

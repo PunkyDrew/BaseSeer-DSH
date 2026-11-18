@@ -29,7 +29,7 @@ import {
   machineTools,
   type BuildEnvironment,
 } from "./environment.ts";
-import { commandsIn, hideWithheldTools, pollingGuard, readOnly, reviewOnly, withholdFromBuilds } from "./guards.ts";
+import { reviewIn, hideWithheldTools, pollingGuard, readOnly, reviewOnly, withholdFromBuilds } from "./guards.ts";
 import {
   buildCheckTool,
   buildMessageTool,
@@ -246,7 +246,13 @@ export function buildSessions(
   function equip(scope: any, agent: any, b: BuildRun, environment: BuildEnvironment, instructions: () => string) {
     hideWithheldTools(scope);
     scope.tools.guard?.(pollingGuard(agent));
-    scope.tools.register(planMapTool(agent, planMap(() => records.doc(b.plan), b.root)));
+    scope.tools.register(
+      planMapTool(
+        agent,
+        planMap(() => records.doc(b.plan), b.root),
+        agent.id === b.lead ? (number) => records.store.ownerMessages.exchange(b.plan, number) : undefined,
+      ),
+    );
     scope.tools.register(recordCommandsTool(agent, (commands, untested) => builds.recordCommands(b.plan, commands, untested)));
     scope.tools.register(programWindowTool(agent, b.root));
     const access = hostServices(scope, ctx);
@@ -327,8 +333,7 @@ export function buildSessions(
   /**
    * One of the build's reviewers: a standard DSH session among the project's
    * chats, on the Planning chat's model, told nothing of the build but its
-   * instructions. It reads and uses the project, running its commands in
-   * `folder` (the project folder, or for the tester a copy of it) with its own
+   * instructions. It reads and runs its checked copy in `folder` with its own
    * port, and has only the tools that read, run and use the program.
    */
   async function startReviewer(b: BuildRun, reviewer: Reviewer, folder: string, instructions: string) {
@@ -345,7 +350,7 @@ export function buildSessions(
         agent.session.append(MODEL_SELECTION, { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) });
         await service("agentPresets").mount(scope, "standard");
         scope.tools.guard?.(pollingGuard(agent));
-        scope.tools.guard?.(commandsIn(agent, folder));
+        scope.tools.guard?.(reviewIn(agent, folder));
         const access = hostServices(scope, ctx);
         if (access)
           scope.tools.register(
@@ -364,6 +369,7 @@ export function buildSessions(
     if (!fullAccess(handle.agent.session)) service("permissionPresets").set(handle.agent.session, FULL_ACCESS);
     title(handle.agent.session, BUILD_CHAT_TITLES[reviewer]);
     await ctx.workspaceRegistry.get(b.workspace)?.attachSession(b[reviewer]);
+    return handle.agent;
   }
 
   /**
@@ -413,8 +419,12 @@ export function buildSessions(
     const entry = sessions.get(session.id);
     const b = entry && builds.running(entry.plan);
     if (b?.lead !== session.id) return;
-    if (event.type === "turn/end") leadSettled(b);
-    else builds.leadStopped(b.id, undefined);
+    if (event.type === "turn/start") builds.leadStopped(b.id, undefined);
+    else if (["aborted", "interrupted"].includes(event.data?.reason?.kind)) {
+      // Cancellation ends the build even with children at work. The last text
+      // can be progress from many steps ago, not a question for the owner.
+      return builds.leadInterrupted(b.id);
+    } else leadSettled(b);
   });
 
   const host: BuildHost = {
@@ -459,7 +469,11 @@ export function buildSessions(
       await endAccess(b);
     },
     async review(b, reviewer, brief) {
-      if (!ctx.agents.get(b[reviewer])) await startReviewer(b, reviewer, brief.folder, brief.instructions);
+      const agent = ctx.agents.get(b[reviewer]) ?? await startReviewer(b, reviewer, brief.folder, brief.instructions);
+      // The immutable header keeps the chat in the workspace; DSH resolves file and search tools against the effective directory.
+      const directory = service("workingDirectory");
+      if (!directory) throw new PlanError("UNAVAILABLE", "The review needs DSH's working directory service to read its checked copy.");
+      await directory.set(agent, brief.folder);
       return answer(b[reviewer], brief.task);
     },
     async tellLead(b, text) {

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { PROJECT_COMMAND_TOOL } from "./commands.ts";
 import { PROGRAM_WINDOW_TOOL } from "./window.ts";
@@ -71,25 +72,31 @@ export function reviewOnly(agentCtx: any, agent: any) {
   );
 }
 
-/** DSH's shell tools resolve relative workdirs against the session's effective directory. */
 const SHELLS = ["pwsh", "bash"];
 
-/**
- * DSH lists a chat among a project's chats only when the chat's folder is the
- * project folder, so a review session sits there while the use test works in
- * a copy: its commands start in `folder`, so the program it runs keeps its data
- * out of the project.
- */
-export function commandsIn(agent: any, folder: string) {
+/** DSH keeps the project as the chat's immutable home. Only the assigned copy is review evidence. */
+export function reviewIn(agent: any, folder: string) {
+  const within = (target: string) => {
+    const where = path.relative(folder, target);
+    return where !== ".." && !where.startsWith(`..${path.sep}`) && !path.isAbsolute(where);
+  };
   return (exec: any) => {
-    if (exec?.agent !== agent || !SHELLS.includes(exec?.name)) return undefined;
-    const workdir = exec.arguments?.workdir;
-    const refusal = `Run your commands in ${folder}: pass its absolute path as workdir.`;
-    // An effective directory can change or recover to the original project
-    // after this guard; only an absolute override keeps shell execution scoped.
-    if (typeof workdir !== "string" || !path.isAbsolute(workdir)) return refusal;
-    const where = path.relative(folder, path.resolve(workdir));
-    return where === ".." || where.startsWith(`..${path.sep}`) || path.isAbsolute(where) ? refusal : undefined;
+    if (exec?.agent !== agent) return undefined;
+    const args = exec.arguments ?? {};
+    if (SHELLS.includes(exec.name)) {
+      if (typeof args.workdir !== "string" || !path.isAbsolute(args.workdir) || !within(path.resolve(args.workdir)))
+        return `Run your commands in ${folder}: pass its absolute path as workdir.`;
+    }
+    if (["read", "read_image", "glob", "grep"].includes(exec.name)) {
+      const input = (exec.name === "read" || exec.name === "read_image" ? args.file_path : args.path) ?? ".";
+      // A vanished copy would make DSH restore the live project as the effective directory.
+      if (
+        !fs.statSync(folder, { throwIfNoEntry: false })?.isDirectory() ||
+        path.relative(folder, agent.ctx.get("workingDirectory").get(agent.session)) !== "" ||
+        typeof input !== "string" || !within(path.resolve(folder, input))
+      )
+        return `Read and search only your checked copy in ${folder}.`;
+    }
   };
 }
 

@@ -82,6 +82,50 @@ function ReviewPlaces({ places }: { places: any[] }) {
   );
 }
 
+const REVIEW_SESSIONS: Record<string, string> = { reviewer: "Code review", tester: "Use test" };
+
+/**
+ * Where each review session's context came from, side by side, for telling
+ * a session that starts large from one that grows as it works.
+ */
+function ReviewContext({ sessions }: { sessions: any[] }) {
+  const number = (value: number) => value.toLocaleString();
+  return (
+    <details className="bpv-muted">
+      <summary>Review sessions' context, in characters of their largest request</summary>
+      <div className="bpv-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th>System prompt and tools</th>
+              <th>Tool output</th>
+              <th>Conversation</th>
+              <th>Compactions</th>
+              <th>Compaction output tokens</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => (
+              <tr key={s.reviewer}>
+                <td>{REVIEW_SESSIONS[s.reviewer]}</td>
+                <td>{number(s.starting)}</td>
+                <td>{number(s.tools)}</td>
+                <td>{number(s.conversation)}</td>
+                <td>{number(s.compactions)}</td>
+                <td>
+                  {number(s.compactionOutput)}
+                  {s.unknownTokens ? ` (${s.unknownTokens} request(s) unknown)` : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
 /**
  * The review in its own words and the lead's report: the planner's account
  * of them is a summary of a summary.
@@ -100,6 +144,16 @@ function ReviewAndReport({ build }: { build: any }) {
         <details>
           <summary>The review's report, from reading the code and using the program</summary>
           <div className="bpv-report">{build.review.report}</div>
+        </details>
+      )}
+      {build.review?.earlier?.length > 0 && (
+        <details>
+          <summary>Earlier reviews, of code that changed before the review was whole</summary>
+          {build.review.earlier.map((earlier: any) => (
+            <div key={earlier.of} className="bpv-report">
+              {earlier.report || "No report yet."}
+            </div>
+          ))}
         </details>
       )}
       {build.report && (
@@ -180,9 +234,10 @@ export function BuildPanel({
         </li>
         <li>
           <strong>Review</strong>: once the check passes, a reviewer reads the
-          code against your words, and a use test starts the program the way
-          its README tells you to, in a copy of the project, and does your job
-          with it; the lead fixes every item they report
+          code against your words while a use test starts the program the way
+          its README tells you to, in a copy of the same revision, and does
+          your job with it; the lead fixes every item they report, and a
+          step that stops the use test is fixed at once so it can go on
         </li>
       </ol>
       {view.change && <NextBuild change={view.change} />}
@@ -234,6 +289,7 @@ export function BuildPanel({
               </ul>
             </div>
           )}
+          {build.reviewContext?.length > 0 && <ReviewContext sessions={build.reviewContext} />}
           {build.review?.places.length > 0 && <ReviewPlaces places={build.review.places} />}
           {build.checks?.length > 0 && <AcceptanceCheck build={build} />}
           <ReviewAndReport build={build} />

@@ -1,8 +1,7 @@
 import type { OwnerMessage } from "../../../domain/plan.ts";
 import type { Document } from "../../../domain/records.ts";
-import { decisionsText } from "./build.ts";
-import { ownerSection } from "./owner.ts";
-import { mapSummary } from "./plan-text.ts";
+import { ownerWords } from "./owner.ts";
+import { decisionsText, mapSummary } from "./plan-text.ts";
 import { NOTHING_FOUND } from "./review.ts";
 
 // The review of the plan at the owner's go: a session that did not plan the
@@ -14,14 +13,13 @@ import { NOTHING_FOUND } from "./review.ts";
 // to pad its report, and it asks rather than decides, since only the owner
 // can say what they want.
 
-/** The plan reviewer's system prompt: the owner's words and the plan they are read against. */
-export function planReviewInstructions(input: { doc: Document; owner: OwnerMessage[]; project: string }) {
-  const { doc, owner, project } = input;
+/** The plan reviewer's system prompt: the plan the owner's words are read against. */
+export function planReviewInstructions(input: { doc: Document; project: string }) {
+  const { doc, project } = input;
   const decisions = decisionsText(doc);
   return [
     `You review the plan of "${project}" for its owner before it is built. You did not plan it. You read and report; you change nothing and run nothing, so only the tools that read and search files, read the plan and read the web work for you.`,
     `The owner described the project to a planner in a Planning chat, and the planner keeps BaseSeer's map of its design: components with the files each one is in and what it may use, interfaces with the record shapes that pass between components, scenarios for the operations the owner described, and decisions. plan_map {command:{action:"records",ids:[...]}} returns records exactly.`,
-    ownerSection(owner),
     decisions ? `The plan's decisions:\n${decisions}` : "",
     `The plan's map:\n\n${mapSummary(doc)}`,
   ]
@@ -29,13 +27,15 @@ export function planReviewInstructions(input: { doc: Document; owner: OwnerMessa
     .join("\n\n");
 }
 
-/** The plan reviewer's first message: what gaps to look for and how to report them. */
-export const planReviewTask = `Read the plan against the owner's words for what is missing before it is built. For each thing the owner said their user does, look for what neither the owner's words nor the plan settle:
+/** The plan reviewer's first message: what gaps to look for and how to report them, then the owner's words. */
+export const planReviewTask = (owner: OwnerMessage[]) => `Read the plan against the owner's words for what is missing before it is built. For each thing the owner said their user does, look for what neither the owner's words nor the plan settle:
 - the alternate case: the same thing done another way the owner's words imply;
 - the exception: what happens when it fails or its input is wrong;
 - the recovery: how a mistake in it is undone, corrected or cancelled.
 Also report what the owner asked for that no part of the plan builds. Do not report what the owner did not ask for and would not miss, how a part works inside, or a choice the plan already settles; a case the owner would plainly not want built is not a gap.
-Number the gaps 1, 2, 3 and so on, each as a question the planner can put to the owner in plain words, with the operation it is about. Report only gaps you found in the plan, not what might be. Your last message is the report alone; if you found no gap, it is exactly: ${NOTHING_FOUND}`;
+Number the gaps 1, 2, 3 and so on, each as a question the planner can put to the owner in plain words, with the operation it is about. Report only gaps you found in the plan, not what might be. Your last message is the report alone; if you found no gap, it is exactly: ${NOTHING_FOUND}
+
+${ownerWords(owner)}`;
 
 /** What the planner is told when the plan review finds gaps and the build holds for the owner's answers. */
 export const plannerPlanReview = (report: string) =>

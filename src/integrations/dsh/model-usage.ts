@@ -57,6 +57,9 @@ export function modelUsageObserver(
           messages: options.messages ?? [],
           tools: options.tools,
         }).length,
+        toolChars: JSON.stringify(
+          (options.messages ?? []).filter((m: any) => m.role === "tool"),
+        ).length,
         tokens: null,
         rate: apiEquivalentRate(options.model, started),
       };

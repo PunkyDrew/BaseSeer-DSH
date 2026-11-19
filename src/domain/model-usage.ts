@@ -41,6 +41,12 @@ export interface ModelUsage {
   prefixSha256: string;
   prefixChars: number;
   requestChars: number;
+  /**
+   * The part of the request that is tool results, so a session's growth can be
+   * told apart: its prefix is what it started with, tool results what its
+   * tools returned, and the rest its own conversation.
+   */
+  toolChars: number;
   tokens: ModelTokens | null;
   invalidUsage?: boolean;
   rate: ReferenceRate | null;

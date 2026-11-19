@@ -1,84 +1,51 @@
 import type { OwnerMessage } from "../../../domain/plan.ts";
 
 // The plan is a design, not a substitute for what the owner actually said.
+// A session reads the owner's words in its conversation, as its first message
+// or a tool's answer, and never in its system prompt: the words grow with
+// every planning message, and a system prompt goes whole with every request,
+// where DSH cannot summarize it as it does a conversation that grows long.
 
 const when = (time: string) => time.slice(0, 16).replace("T", " ");
 
 const quoted = (text: string) => text.split("\n").map((line) => `> ${line}`).join("\n");
 
-// The planner puts ordinary-chat decisions in a self-contained final block.
-// Question-form exchanges already contain just questions and options.
-const decisionHeading = /^For your decision:[ \t]*\r?$/im;
-const listItem = /^\s*(?:[-+*]|\*{0,2}\d+[.)]|[A-Z][.)]|\|)\s/m;
-const sectionTitle = /^#{1,6}\s+[^\n]+/;
-const offer = /\b(?:I(?:['’]d| would) (?:suggest|recommend|propose|change)|I (?:suggest|recommend|propose)|(?:my|the|our|your) (?:suggestions?|recommendations?|proposals?|options?|choices?)\b|(?:suggestions|recommendations|proposals|options|choices):)/i;
-const pointsBack = /\b(?:yes|no|yeah|sure|ok(?:ay)?|agreed?|both|all|that|those|these|them|it|one|first|second|third|latter|former)\b/i;
-const dependentQuestion = /\b(?:that|this|these|those|them|it|which|proceed|go ahead|sound good|agree)\b|\b(?:shall|should|can) (?:I|we)\s*\?/i;
+/** What a session that BaseSeer does not hand the owner's words is told, to read them itself. */
+export const readOwnerWords = `The owner described this project to a planner in a Planning chat. Their messages say what the project must do, and a later message can change an earlier one. Read them before anything else: owner_messages {} returns them word for word, each with its number, and owner_messages {number:N} returns message N with the planner's text it answers.`;
 
-/** Select text, never summarize it. Free-form history can have a proposal far
- * above its final question; if an answer points back into unlabelled prose,
- * keep the reply rather than invent what the owner meant. */
-function decisionContext({ replyTo, text }: OwnerMessage): string {
-  if (!replyTo) return "";
-  const heading = decisionHeading.exec(replyTo);
-  if (heading) return replyTo.slice(heading.index);
+/** The most characters of the owner's words one reading holds: about a long source file's. */
+const READING = 32000;
 
-  // The question form numbers both sides, including prompts like “Pick a size”
-  // that have no question mark. Its stored reply has no surrounding discussion.
-  if (/^1\. /.test(replyTo) && /^1\. /.test(text)) return replyTo;
-  const blocks = replyTo.split(/\r?\n[ \t]*\r?\n/);
-  const kept = new Map<number, string>();
-  let title = -1;
-  let offered = false;
-  for (const [i, block] of blocks.entries()) {
-    if (sectionTitle.test(block)) title = i;
-    const proposes = offer.test(block);
-    if (!proposes && !/\?(?=[\s*_”'"’)]|$)/.test(block)) continue;
-    if (title >= 0 && !kept.has(title)) kept.set(title, blocks[title]!.match(sectionTitle)![0]);
-    kept.set(i, block);
-    offered ||= proposes;
-    // Options may precede rather than follow the question. Keep their lead-in
-    // too when it is a separate paragraph ending in a colon.
-    if (block.includes("?") && i > 0 && listItem.test(blocks[i - 1]!)) {
-      let j = i - 1;
-      while (j >= 0 && listItem.test(blocks[j]!)) { kept.set(j, blocks[j]!); j--; }
-      if (j >= 0 && /:\s*\**$/.test(blocks[j]!)) kept.set(j, blocks[j]!);
-    }
-    let j = i + 1;
-    while (j < blocks.length && !sectionTitle.test(blocks[j]!) && listItem.test(blocks[j]!)) {
-      kept.set(j, blocks[j]!);
-      j++;
-    }
-    // A proposal heading may introduce several paragraphs of ordinary prose.
-    if (proposes && j === i + 1 && !listItem.test(block) && /:\s*\**$/.test(block))
-      while (j < blocks.length && !sectionTitle.test(blocks[j]!)) {
-        kept.set(j, blocks[j]!);
-        j++;
-      }
-  }
-  // A confirmation can refer to an unlabelled proposal (“go ahead?”), or
-  // cross-reference several numbered sections. Keep the original scope: a
-  // naked question, or numbered choices stripped of their subjects, can invert
-  // the decision. No length cap may cut an option or qualification in half.
-  const excerpt = [...kept.values()].join("\n");
-  if (pointsBack.test(text) && (/#\d+/.test(excerpt) || (!offered && (!excerpt || dependentQuestion.test(excerpt))))) return replyTo;
-  return blocks.flatMap((_, i) => kept.has(i) ? [kept.get(i)!] : []).join("\n\n");
-}
-
-/** The owner's messages in full, oldest first; those sent after `since` are marked new. */
-export function ownerSection(messages: OwnerMessage[], since?: string, view: "full" | "lead" = "full") {
+/**
+ * The owner's messages numbered below `before`, word for word and oldest
+ * first: the latest whole ones that one reading holds, each with its number,
+ * and how to read the rest. Those sent after `since` are marked new.
+ */
+export function ownerWords(messages: OwnerMessage[], since?: string, before = messages.length + 1) {
   if (!messages.length)
     return "The owner's messages: none are kept for this project, so build what the map describes.";
-  const entries = messages.map((m, i) => {
+  const end = Math.min(before, messages.length + 1) - 1;
+  let start = end;
+  for (let size = 0; start > 0; start--) {
+    size += messages[start - 1]!.text.length;
+    if (start < end && size > READING) break;
+  }
+  const entries = messages.slice(start, end).map((m, i) => {
     const fresh = since !== undefined && m.time > since ? ", new since the last build" : "";
-    const head = `[${view === "lead" ? `#${i + 1}, ` : ""}${when(m.time)}${fresh}]`;
-    const context = view === "lead" ? decisionContext(m) : m.replyTo;
-    return context
-      ? `${head} The planner had written:\n${quoted(context)}\nThe owner answered:\n${m.text}`
-      : `${head}\n${m.text}`;
+    return `[#${start + i + 1}, ${when(m.time)}${fresh}]\n${m.text}`;
   });
-  const lookup = view === "lead"
-    ? ' Planner text is excerpted. If a reference is unclear, read its complete exchange before acting: plan_map {command:{action:"exchange",number:N}}, using the number on that owner message.'
+  const earlier = start
+    ? ` Messages 1 to ${start} came before these: owner_messages {before:${start + 1}} returns them.`
     : "";
-  return `The owner's messages in the Planning chat, word for word, oldest first:${lookup}\n\n${entries.join("\n\n")}`;
+  return `The owner's messages in the Planning chat, word for word, oldest first, each with its number. Where one answers the planner, as a bare "yes" does, read what it answers before you act on it: owner_messages {number:N} returns message N with the planner's text it answers.${earlier}\n\n${entries.join("\n\n")}`;
+}
+
+/** One owner message by its number with the planner's text it answers, neither shortened: a short answer means what it answers. */
+export function ownerExchange(messages: OwnerMessage[], number: number) {
+  const m = messages[number - 1];
+  if (!m) return undefined;
+  const head = `[#${number}, ${when(m.time)}]`;
+  return m.replyTo
+    ? `${head} The planner had written:\n${quoted(m.replyTo)}\nThe owner answered:\n${m.text}`
+    : `${head}\n${m.text}`;
 }

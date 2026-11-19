@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import { PlanError, text, type OwnerMessage } from "../../../domain/plan.ts";
 import type { BuildCommands, PlanMap } from "../../../application/build/index.ts";
-import { pageValue } from "../paging.ts";
+import { ownerExchange, ownerWords } from "../../../application/build/briefs/index.ts";
 import { toolJson } from "../tool-json.ts";
 import {
   PROJECT_COMMAND_TOOL,
@@ -23,6 +23,11 @@ const jsonOutput = {
   render: (_args: any, value: any) => [
     { type: "text" as const, text: JSON.stringify(value) },
   ],
+};
+
+const textOutput = {
+  schema: { type: "string" as const },
+  render: (_args: any, value: any) => [{ type: "text" as const, text: String(value) }],
 };
 
 function refuseOtherAgents(agent: any, exec: any) {
@@ -262,12 +267,10 @@ export function programWindowTool(agent: any, folder: string) {
  * exactly and its planned components against the files in the project
  * folder.
  */
-export function planMapTool(agent: any, map: PlanMap, exchange?: (number: number) => OwnerMessage | undefined) {
+export function planMapTool(agent: any, map: PlanMap) {
   return defineTool({
     name: "plan_map",
-    description:
-      `Read the project's plan from BaseSeer's map, read-only. command.action: "records" lists every record and link; with ids:[...], it returns those records exactly, with the links that touch them. "coverage" compares each planned component with the files in this folder: built, partial or missing, the files no component plans, and where it could not read the folder whole.` +
-      (exchange ? ' "exchange" with number reads that numbered owner message and the planner text it answers, unmodified. For a paged exchange pass nextOffset as offset with the same number.' : ""),
+    description: `Read the project's plan from BaseSeer's map, read-only. command.action: "records" lists every record and link; with ids:[...], it returns those records exactly, with the links that touch them. "coverage" compares each planned component with the files in this folder: built, partial or missing, the files no component plans, and where it could not read the folder whole.`,
     parameters: {
       command: {
         type: "object",
@@ -285,16 +288,39 @@ export function planMapTool(agent: any, map: PlanMap, exchange?: (number: number
         return toolJson(map.records(ids), "plan_map");
       }
       if (action === "coverage") return toolJson(await map.coverage(), "plan_map");
-      if (action === "exchange") {
-        if (!exchange) throw new PlanError("DENIED", "Only the build's lead can look up an exchange.");
-        const { number, offset } = args.command;
-        if (!Number.isSafeInteger(number) || number < 1)
-          throw new PlanError("INVALID", "Use a positive whole exchange number from the lead's instructions.");
-        const message = exchange(number);
-        if (!message) throw new PlanError("INVALID", `No saved exchange has number ${number}.`);
-        return pageValue(message, offset);
-      }
-      throw new PlanError("INVALID", `Use action ${exchange ? '"records", "coverage" or "exchange"' : '"records" or "coverage"'}`);
+      throw new PlanError("INVALID", 'Use action "records" or "coverage"');
+    },
+  });
+}
+
+export const OWNER_MESSAGES_TOOL = "owner_messages";
+
+/**
+ * The owner's words as a session reads them: in its conversation, where DSH
+ * summarizes them with the rest once it grows long, and the session reads
+ * them again when it needs their exact wording. Messages sent after `since`
+ * are marked new.
+ */
+export function ownerMessagesTool(agent: any, messages: () => OwnerMessage[], since?: string) {
+  const whole = (value: unknown, name: string) => {
+    if (!Number.isSafeInteger(value) || (value as number) < 1)
+      throw new PlanError("INVALID", `${name} is a message's number: a whole number from 1.`);
+    return value as number;
+  };
+  return defineTool({
+    name: OWNER_MESSAGES_TOOL,
+    description:
+      "Read the owner's messages from the Planning chat, word for word. With no argument it returns the latest, each with its number, and says how to read any before them; before:N returns those numbered below N; number:N returns message N alone with the planner's text it answers.",
+    parameters: { number: { type: "number" }, before: { type: "number" } },
+    output: textOutput,
+    async execute(args: any, exec: any) {
+      refuseOtherAgents(agent, exec);
+      const all = messages();
+      if (args.number === undefined)
+        return ownerWords(all, since, args.before === undefined ? undefined : whole(args.before, "before"));
+      const exchange = ownerExchange(all, whole(args.number, "number"));
+      if (!exchange) throw new PlanError("INVALID", `No owner message has number ${args.number}.`);
+      return exchange;
     },
   });
 }

@@ -86,6 +86,17 @@ export function architectureText(doc: Document) {
 - Errors: ${a.errors}`;
 }
 
+/** The plan's decisions in full, for the sessions that read every one: the lead, which passes on those that matter to a part, and the readers that hold the plan against the owner's words. */
+export function decisionsText(doc: Document) {
+  return doc.records
+    .filter((r) => r.kind === "decision" && r.status !== "superseded" && !r.data.modelPolicy)
+    .map((r) => {
+      const alternatives = r.data.alternatives?.length ? ` Alternatives considered: ${r.data.alternatives.join("; ")}.` : "";
+      return `- ${r.title} (${r.id}): ${r.data.choice ?? ""}${r.data.context ? ` Context: ${r.data.context}` : ""}${alternatives}`;
+    })
+    .join("\n");
+}
+
 const indexLines = (doc: Document, kind: string) =>
   doc.records
     .filter((r) => r.kind === kind && live(r))

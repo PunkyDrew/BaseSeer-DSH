@@ -246,7 +246,6 @@ export class Store {
    */
   readonly ownerMessages = {
     read: (plan: string): OwnerMessage[] => structuredClone(this.view(plan).ownerMessages),
-    exchange: (plan: string, number: number): OwnerMessage | undefined => structuredClone(this.view(plan).ownerMessages[number - 1]),
     keep: (plan: string, message: OwnerMessage) =>
       this.change(plan, (state) => {
         state.ownerMessages = [...state.ownerMessages, message];

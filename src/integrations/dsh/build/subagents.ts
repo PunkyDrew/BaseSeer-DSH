@@ -9,10 +9,11 @@ import {
   type Reviewer,
 } from "../../../application/build/index.ts";
 import {
+  plannerLeadFailed,
   plannerLeadStopped,
   plannerReport,
   subagentInstructions,
-} from "../../../application/build/briefs/index.ts";
+} from "../../../application/build/briefs/build.ts";
 import { planMap } from "../../../application/build/map.ts";
 import { subagentPort } from "../../../application/build/ports.ts";
 import type { Actor } from "../../../application/planning.ts";
@@ -34,6 +35,7 @@ import {
   buildCheckTool,
   buildMessageTool,
   hostServices,
+  ownerMessagesTool,
   planMapTool,
   programWindowTool,
   projectCommandTool,
@@ -246,12 +248,9 @@ export function buildSessions(
   function equip(scope: any, agent: any, b: BuildRun, environment: BuildEnvironment, instructions: () => string) {
     hideWithheldTools(scope);
     scope.tools.guard?.(pollingGuard(agent));
+    scope.tools.register(planMapTool(agent, planMap(() => records.doc(b.plan), b.root)));
     scope.tools.register(
-      planMapTool(
-        agent,
-        planMap(() => records.doc(b.plan), b.root),
-        agent.id === b.lead ? (number) => records.store.ownerMessages.exchange(b.plan, number) : undefined,
-      ),
+      ownerMessagesTool(agent, () => records.store.ownerMessages.read(b.plan), b.change?.since.startedAt),
     );
     scope.tools.register(recordCommandsTool(agent, (commands, untested) => builds.recordCommands(b.plan, commands, untested)));
     scope.tools.register(programWindowTool(agent, b.root));
@@ -269,14 +268,7 @@ export function buildSessions(
 
   function equipSubagent(agent: NativeAgent, b: BuildRun) {
     const scope = agent.ctx as any;
-    equip(scope, agent, b, buildEnvironment(nextPort(b), browsers), () =>
-      subagentInstructions(
-        records.doc(b.plan),
-        records.store.ownerMessages.read(b.plan),
-        b.project,
-        b.change?.since.startedAt,
-      ),
-    );
+    equip(scope, agent, b, buildEnvironment(nextPort(b), browsers), () => subagentInstructions(records.doc(b.plan), b.project));
     // A subagent's first message is the task the lead gave it.
     scope.on("session/event", (session: { id: string }, event: any) => {
       if (session.id !== agent.id || tasks.has(agent.id) || event?.type !== "user/message") return;
@@ -357,6 +349,7 @@ export function buildSessions(
             projectCommandTool(agent, { cwd: folder, commands: () => builds.commands(b.plan) }, environment, access),
           );
         scope.tools.register(programWindowTool(agent, folder));
+        scope.tools.register(ownerMessagesTool(agent, () => records.store.ownerMessages.read(b.plan)));
         reviewOnly(scope, agent);
         scope.systemPrompt.section({
           name: "build-plan:review",
@@ -393,6 +386,7 @@ export function buildSessions(
         await service("agentPresets").mount(scope, "standard");
         readOnly(scope, agent);
         scope.tools.register(planMapTool(agent, planMap(() => records.doc(v.plan), v.root)));
+        scope.tools.register(ownerMessagesTool(agent, () => records.store.ownerMessages.read(v.plan)));
         scope.systemPrompt.section({ name: "build-plan:validate", order: 700, text: () => instructions });
       },
     });
@@ -404,14 +398,16 @@ export function buildSessions(
    * The lead's turn is over with its build still running and nothing of the
    * build at work: it stopped before the check passed, with what it needs in
    * its last message. A subagent still working wakes it again with its report.
+   * A turn its model's provider ended has no such message: what the provider
+   * said is the reason, since the lead's last text is from before the failure.
    */
-  function leadSettled(b: BuildRun) {
+  function leadSettled(b: BuildRun, failure?: string) {
     setTimeout(() => {
       const lead = ctx.agents.get(b.lead);
       if (builds.running(b.plan)?.id !== b.id || !lead || agentsOf(b).some(working)) return;
-      const answer = lastAnswer(lead);
+      const answer = failure === undefined ? lastAnswer(lead) : `A request to the lead's model failed: ${failure}`;
       builds.leadStopped(b.id, answer);
-      void tell(b.chat, plannerLeadStopped(answer)).catch(() => undefined);
+      void tell(b.chat, failure === undefined ? plannerLeadStopped(answer) : plannerLeadFailed(failure)).catch(() => undefined);
     }, SETTLE_MS);
   }
   ctx.on?.("session/event", (session: { id: string }, event: any) => {
@@ -424,7 +420,10 @@ export function buildSessions(
       // Cancellation ends the build even with children at work. The last text
       // can be progress from many steps ago, not a question for the owner.
       return builds.leadInterrupted(b.id);
-    } else leadSettled(b);
+    } else {
+      const reason = event.data?.reason;
+      leadSettled(b, reason?.kind === "error" ? String(reason.error?.message ?? "no reason given").replace(/\s+/g, " ").trim() : undefined);
+    }
   });
 
   const host: BuildHost = {

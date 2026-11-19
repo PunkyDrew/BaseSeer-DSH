@@ -11,3 +11,5 @@ export const BUILD_CHAT_TITLES = {
   validator: "BaseSeer validation (watch only)",
   planReviewer: "BaseSeer plan review (watch only)",
 } as const;
+
+export type BuildChatTitles = typeof BUILD_CHAT_TITLES;

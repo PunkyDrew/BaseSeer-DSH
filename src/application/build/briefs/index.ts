@@ -1,9 +1,9 @@
-// What a build's sessions are told: the lead's instructions and first message,
-// every subagent's instructions, what the check found, the reviewers', the
-// validator's and the plan reviewer's briefs, and what the planner is told
-// of the build.
-export { leadInstructions, leadTask, plannerLeadStopped, plannerReport, subagentInstructions } from "./build.ts";
+// What the sessions that read a build are told: the owner's words, what the
+// check found, and the reviewers', the validator's and the plan reviewer's
+// briefs. The lead's and the subagents' briefs are in build.ts, which the
+// plan reviewer's brief may not depend on.
 export { placesToLook } from "./findings.ts";
+export { ownerExchange, ownerWords } from "./owner.ts";
 export { plannerPlanReview, plannerPlanReviewFailed, planReviewInstructions, planReviewTask } from "./plan-review.ts";
 export { blocked, found, joinReports, reviewInstructions, reviewTask, useInstructions, useTask } from "./review.ts";
 export { plannerValidation, validationInstructions, validationTask } from "./validation.ts";

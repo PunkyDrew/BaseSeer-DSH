@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PROJECT_COMMAND_TOOL } from "./commands.ts";
+import { OWNER_MESSAGES_TOOL } from "./tools.ts";
 import { PROGRAM_WINDOW_TOOL } from "./window.ts";
 import { PLAN_FOLDER } from "../../../storage/project-folder.ts";
 
@@ -53,6 +54,7 @@ const REVIEW_TOOLS = [
   "web_fetch",
   PROJECT_COMMAND_TOOL,
   PROGRAM_WINDOW_TOOL,
+  OWNER_MESSAGES_TOOL,
 ];
 
 const REVIEW_ONLY =
@@ -101,7 +103,7 @@ export function reviewIn(agent: any, folder: string) {
 }
 
 /** The tools a validation or plan review reads with: it changes nothing, runs nothing and starts no other session. */
-const READING_TOOLS = ["read", "read_image", "grep", "glob", "plan_map", "web_search", "web_fetch"];
+const READING_TOOLS = ["read", "read_image", "grep", "glob", "plan_map", OWNER_MESSAGES_TOOL, "web_search", "web_fetch"];
 
 const READING_ONLY =
   "This BaseSeer session reads and reports: it changes nothing, runs nothing and starts no other session. Read, search and report what you find.";

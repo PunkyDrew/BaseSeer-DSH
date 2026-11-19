@@ -1,8 +1,7 @@
-import type { OwnerMessage } from "../../../domain/plan.ts";
 import type { Document } from "../../../domain/records.ts";
 import type { BuildCommands, Reviewer } from "../model.ts";
 import { reviewItems } from "../review-places.ts";
-import { ownerSection } from "./owner.ts";
+import { readOwnerWords } from "./owner.ts";
 
 // The defect review. Once a build's check first passes, two sessions that
 // share nothing with the build judge it for its owner, as blind reviewers do:
@@ -27,14 +26,14 @@ const BLOCKED = "BLOCKED:";
  */
 export const blocked = (report: string) => /^\s*(?:1\.\s*)?BLOCKED:/.test(report);
 
-/** The reviewer's system prompt: the owner's words and how to judge the code, and nothing of the build. */
-export function reviewInstructions(owner: OwnerMessage[], project: string, commands: BuildCommands, copy: string) {
+/** The reviewer's system prompt: where the owner's words are and how to judge the code, and nothing of the build. */
+export function reviewInstructions(project: string, commands: BuildCommands, copy: string) {
   const recorded = Object.entries(commands)
     .map(([name, command]) => `${name}: ${command}`)
     .join("; ");
   return [
     `You review "${project}" for its owner, in your checked copy: ${copy}. Read the files there and pass that absolute path as your shell workdir. You did not build it and share nothing with the sessions that did, so judge the code by what the owner asked for, not by how it was meant to work.`,
-    ownerSection(owner),
+    readOwnerWords,
     `The project's recorded commands, which project_command runs: ${recorded || "none"}. They have just passed in a clean copy, so do not run its tests again. Read what the build changed, and run the program only to confirm what you read: another session uses it the way its owner will. You change nothing in the project and start no other session: the tools that edit files or start sessions are withheld from you.`,
   ].join("\n\n");
 }
@@ -61,14 +60,14 @@ function operations(doc: Document) {
 }
 
 /**
- * The tester's system prompt: the owner's words and the operations the plan
- * holds, and nothing of the build or its code, which the reviewer reads.
+ * The tester's system prompt: where the owner's words are and the operations
+ * the plan holds, and nothing of the build or its code, which the reviewer reads.
  */
-export function useInstructions(owner: OwnerMessage[], project: string, doc: Document, copy: string) {
+export function useInstructions(project: string, doc: Document, copy: string) {
   const planned = operations(doc);
   return [
     `You use "${project}" for its owner before it is delivered to them. You did not build it and share nothing with the sessions that did. Do the owner's job with it, as they will, and judge the program by what it does when used, not by its code: another session reads the code.`,
-    ownerSection(owner),
+    readOwnerWords,
     planned
       ? `What the owner will do with it, as the plan lists each operation they described; where the plan and the owner's words differ, their words win:\n${planned}`
       : "",

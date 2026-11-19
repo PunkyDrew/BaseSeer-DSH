@@ -1,5 +1,5 @@
 import { apiEquivalentCost } from "../../domain/model-usage.ts";
-import type { BuildRun } from "./model.ts";
+import { REVIEWERS, type BuildRun } from "./model.ts";
 
 type UsageSum = {
   requests: number;
@@ -39,9 +39,43 @@ function buildUsage(b: BuildRun, rows: any[]) {
   return { total, lead, byModel };
 }
 
+/**
+ * Where each review session's context came from, to tell a session that
+ * starts large from one that grows as it works, which need different
+ * remedies: of its largest request, the characters of the system prompt and
+ * tool definitions it starts with, DSH's and BaseSeer's together, those of
+ * tool output and those of the conversation besides; and
+ * how often DSH compacted it, with the output that cost. Requests whose
+ * provider reported no tokens are counted apart, as unknown rather than none.
+ */
+function reviewContext(b: BuildRun, rows: any[]) {
+  return REVIEWERS.flatMap((reviewer) => {
+    const mine = rows.filter((row) => row.run === b.id && row.session === b[reviewer]);
+    if (!mine.length) return [];
+    const largest = mine.reduce((top, row) => (row.requestChars > top.requestChars ? row : top));
+    const compactions = mine.filter((row) => row.purpose === "compaction");
+    return [{
+      reviewer,
+      requests: mine.length,
+      starting: largest.prefixChars,
+      tools: largest.toolChars,
+      conversation: Math.max(0, largest.requestChars - largest.prefixChars - largest.toolChars),
+      compactions: compactions.length,
+      compactionOutput: compactions.reduce((sum, row) => sum + (row.tokens?.outputTokens ?? 0), 0),
+      unknownTokens: mine.filter((row) => !row.tokens).length,
+    }];
+  });
+}
+
 /** A build as the Build view and the planner see it: the saved run without the project's path, with its usage, the lead's and its subagents'. */
 export function buildView(b: BuildRun, usageRows: any[]) {
   const { root: _root, ...saved } = b;
   const usage = buildUsage(b, usageRows);
-  return { ...saved, usage: usage.total, leadUsage: usage.lead, usageByModel: usage.byModel };
+  return {
+    ...saved,
+    usage: usage.total,
+    leadUsage: usage.lead,
+    usageByModel: usage.byModel,
+    reviewContext: reviewContext(b, usageRows),
+  };
 }

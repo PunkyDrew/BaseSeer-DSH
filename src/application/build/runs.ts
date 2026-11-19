@@ -15,12 +15,11 @@ import {
   nextBuildSummary,
   type DeliveredBuild,
 } from "./as-built.ts";
+import { leadInstructions, leadTask } from "./briefs/build.ts";
 import {
   blocked,
   found,
   joinReports,
-  leadInstructions,
-  leadTask,
   placesToLook,
   plannerPlanReview,
   plannerPlanReviewFailed,
@@ -330,10 +329,9 @@ export class BuildRuns {
     const brief = {
       instructions: planReviewInstructions({
         doc: this.records.doc(r.plan),
-        owner: this.records.store.ownerMessages.read(r.plan),
         project: this.records.store.read(r.plan).title,
       }),
-      task: planReviewTask,
+      task: planReviewTask(this.records.store.ownerMessages.read(r.plan)),
     };
     const report = (await this.host!.reviewPlan!(r, brief)).trim();
     if (!report) throw new Error("its session ended without a report");
@@ -478,8 +476,8 @@ export class BuildRuns {
     return {
       route,
       models,
-      instructions: leadInstructions({ doc, owner, project: b.project, since: b.change?.since.startedAt }),
-      task: leadTask(b.project, b.change ? { scope: b.change, ...(before ? { before } : {}) } : undefined, repair),
+      instructions: leadInstructions({ doc, project: b.project }),
+      task: leadTask(b.project, owner, b.change ? { scope: b.change, ...(before ? { before } : {}) } : undefined, repair),
     };
   }
 
@@ -520,10 +518,9 @@ export class BuildRuns {
       const brief = {
         instructions: validationInstructions({
           doc,
-          owner: this.records.store.ownerMessages.read(v.plan),
           project: this.records.store.read(v.plan).title,
         }),
-        task: validationTask(await inspectFindings(v.root, doc)),
+        task: validationTask(this.records.store.ownerMessages.read(v.plan), await inspectFindings(v.root, doc)),
       };
       const report = (await this.host!.validate!(v, brief)).trim();
       if (!report) throw new Error("its session ended without a report");
@@ -667,6 +664,7 @@ export class BuildRuns {
    */
   private async review(id: string, of: string, doc: Document, places: string[]): Promise<CheckResult | undefined> {
     const b = this.store.get(id);
+    if (this.revisionChanged(b, of)) this.restartReview(b);
     const owed = REVIEWERS.filter((reviewer) => !b.review?.from.includes(reviewer));
     if (!this.host?.review || !owed.length) return undefined;
     const settled = new Map<Reviewer, ReviewResult>();
@@ -704,6 +702,7 @@ export class BuildRuns {
         report: joined.report,
         from: [...(after.review?.from ?? []), ...finished.map((r) => r.reviewer)],
         places: found(joined.report) ? reviewPlaces(joined.report, doc) : [],
+        blocked: isBlocked,
       };
     for (const { reviewer, of: revision, report } of reports)
       this.store.note(after, `The ${REVIEW_NAMES[reviewer]} ${found(report) ? `reported on ${revision}: ${clip(report, 600)}` : `found nothing on ${revision}.`}`);
@@ -733,9 +732,30 @@ export class BuildRuns {
     return why ? { passed: false, failures: [{ check: "review", summary: why }], instruction: again } : undefined;
   }
 
+  /**
+   * Whether the review so far read code other than the revision now checked,
+   * with a reviewer still owed and none at work, as after a reviewer that
+   * could not run: reports of different revisions do not make one review.
+   * A blocked use test is not this case: it goes on with the repair.
+   */
+  private revisionChanged(b: BuildRun, of: string) {
+    const review = b.review;
+    if (!review?.from.length || review.from.length === REVIEWERS.length || review.blocked) return false;
+    if (REVIEWERS.some((reviewer) => this.reviewing.has(`${b.id}:${reviewer}`))) return false;
+    return git.changes(b.root, review.of, of).length > 0;
+  }
+
+  /** Keeps the review so far as history, for both reviewers to read the new revision. */
+  private restartReview(b: BuildRun) {
+    const review = b.review!;
+    const kept = { of: review.of, report: review.report, ...(review.fixed ? { fixed: review.fixed } : {}) };
+    b.review = { ...review, report: "", from: [], places: [], fixed: [], earlier: [...(review.earlier ?? []), kept] };
+    this.store.note(b, "The code changed since the review's report, so both reviewers read the new revision.");
+    this.store.save(b);
+  }
+
   /** One reviewer's report on its assigned revision, even if the next check takes the report. */
   private async reviewBy(b: BuildRun, reviewer: Reviewer, of: string, doc: Document): Promise<ReviewResult> {
-    const owner = this.records.store.ownerMessages.read(b.plan);
     const name = REVIEW_NAMES[reviewer];
     try {
       // Refresh only when assigning a turn, never when collecting its pending report.
@@ -743,8 +763,8 @@ export class BuildRuns {
       git.checkout(b.root, folder, of);
       const brief =
         reviewer === "reviewer"
-          ? { folder, instructions: reviewInstructions(owner, b.project, b.commands ?? {}, folder), task: reviewTask(b.base, of) }
-          : { folder, instructions: useInstructions(owner, b.project, doc, folder), task: useTask };
+          ? { folder, instructions: reviewInstructions(b.project, b.commands ?? {}, folder), task: reviewTask(b.base, of) }
+          : { folder, instructions: useInstructions(b.project, doc, folder), task: useTask };
       const report = (await this.host!.review!(b, reviewer, brief)).trim();
       return report ? { reviewer, of, report } : { reviewer, of, failure: `The ${name} left no report.` };
     } catch (error) {

@@ -87,7 +87,9 @@ export type Reviewer = (typeof REVIEWERS)[number];
  * as one numbered list, which reviewers that list holds, where its items fell
  * in the plan and the items the lead has fixed. The review stands for the
  * owner, so a build completes only once every reviewer has reported and every
- * item is fixed.
+ * item is fixed. A report holds for the revision it read: when the code
+ * changed before the review was whole, the reviews so far are kept as
+ * `earlier` and both reviewers read the new revision.
  */
 export type BuildReview = {
   at: string;
@@ -96,6 +98,9 @@ export type BuildReview = {
   from: Reviewer[];
   places: ReviewPlace[];
   fixed?: number[];
+  /** The use test reported a blocker: it goes on with the lead's repair. */
+  blocked?: boolean;
+  earlier?: { of: string; report: string; fixed?: number[] }[];
 };
 
 /** Folders the machine's tools install into for every project, each with the names it holds. */
